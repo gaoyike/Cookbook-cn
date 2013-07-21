@@ -1,0 +1,1050 @@
+MongoDB Persistence with Record
+-------------------------------
+
+这章中, 我们介绍关于使用MongoDB在Lift的应用中. 如果你想了解更多关于Mongo本身, 请看:http://cookbook.mongodb.org/[http://cookbook.mongodb.org/].
+
+这章的代码在如下地址: https://github.com/LiftCookbook/cookbook_mongo[https://github.com/LiftCookbook/cookbook_mongo].
+
+[[ConnectingToMongo]]
+连接到MongoDB
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想连接到MongoDB.
+
+Solution
+^^^^^^^^
+
+添加Lift的Mongo依赖库到你的应用中, 并且设置连接, 通过使用 `net.liftweb.mongodb` 和 `com.mongodb`.
+
+在 `Build.sbt`中, 添加以下代码到`libraryDependencies`:
+
+[source,scala]
+-----------------------------------------------------------------
+"net.liftweb" %% "lift-mongodb-record" % liftVersion,
+-----------------------------------------------------------------
+
+在 `Boot.scala` 添加:
+
+[source,scala]
+-----------------------------------------------------------------
+import com.mongodb.{ServerAddress, Mongo}
+import net.liftweb.mongodb.{MongoDB,DefaultMongoIdentifier}
+
+val server = new ServerAddress("127.0.0.1", "20717")
+MongoDB.defineDb(DefaultMongoIdentifier, new Mongo(server), "mydb")
+-----------------------------------------------------------------
+
+以上代码会给你一个连接到本地的MongoDB, 连接名为: "mydb".
+
+Discussion
+^^^^^^^^^^
+
+如果你的数据库需要验证, 你需要使用`MongoDB.defineDbAuth`:
+
+[source,scala]
+--------------------------------------------------------------
+MongoDB.defineDbAuth(DefaultMongoIdentifier, new Mongo(server),
+  "mydb", "username", "password")
+--------------------------------------------------------------
+
+一些云服务会给你一个URL让你接入, 比如说"mongodb://alex.mongohq.com:10050/fglvBskrsdsdsDaGNs1". 在这里, 前一部分是你的host和端口, 在`/`后是你的数据库名字.
+
+如果你需要连接一个这样的URL到Mongo, 你可以使用 `java.net.URI` 分析URL然后使用它:
+
+[source,scala]
+--------------------------------------------------------------
+object MongoUrl {
+
+  def defineDb(id: MongoIdentifier, url: String) {
+
+    val uri = new URI(url)
+
+    val db = uri.getPath drop 1
+    val server = new Mongo(new ServerAddress(uri.getHost, uri.getPort))
+
+    Option(uri.getUserInfo).map(_.split(":")) match {
+      case Some(Array(user,pass)) =>
+        MongoDB.defineDbAuth(id, server, db, user, pass)
+      case _ =>
+        MongoDB.defineDb(id, server, db)
+    }
+  }
+
+}
+
+MongoUrl.defineDb(DefaultMongoIdentifier,
+  "mongodb://user:pass@127.0.0.1:27017/myDb")
+--------------------------------------------------------------
+
+Mongo上, 完整的URL scheme是非常复杂的, 它允许多个host和connection作为参数, 但是上边的代码可以处理可选的用户名和密码, 它足够帮你建立连接了.
+
+`DefaultMongoIdentifier` 是一个用来设置特定连接的值.Lift把一个Identifier映射到一个连接上, 这样你可以使用多个数据库. 一般, 我们只用一个数据库, 所以我们使用`DefaultMongoIdentifier`.
+
+然而, 如果你必须要同时访问两个Mongo数据库, 你建立一个新的Identifier, 然后就分配给Record.比如说:
+
+[source,scala]
+--------------------------------------------------------------
+object OtherMongoIdentifier extends MongoIdentifier {
+  def jndiName: String = "other"
+}
+
+MongoUrl.defineDb(OtherMongoIdentifier, "mongodb://127.0.0.1:27017/other")
+
+object Country extends Country with MongoMetaRecord[Country] {
+  override def collectionName = "example.earth"
+  override def mongoIdentifier = OtherMongoIdentifier
+}
+--------------------------------------------------------------
+
+在这里, `lift-mongodb-record` 本身依赖于另一个Lift module下的`lift-mongodb`, 它提供了一个更底层的Mongo数据库的访问.
+
+
+See Also
+^^^^^^^^
+
+一些关于Mongo的设置, 参数集合都在以下地址有介绍:  https://www.assembla.com/wiki/show/liftweb/Mongo_Configuration[https://www.assembla.com/wiki/show/liftweb/Mongo_Configuration].
+
+一个全面的介绍关于Mongo连接URL: http://docs.mongodb.org/manual/reference/connection-string/[http://docs.mongodb.org/manual/reference/connection-string/].
+
+
+
+[[MongoHashMap]]
+使用Mongo Record存储一个HashMap
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想存储一个HashMap在Mongo中.
+
+Solution
+^^^^^^^^
+
+建立一个Mongo Recrod, 并且包含 `MongoMapField`:
+
+[source,scala]
+-------------------------------------------------------------------------------
+import net.liftweb.mongodb.record._
+import net.liftweb.mongodb.record.field._
+
+class Country private () extends MongoRecord[Country] with StringPk[Country] {
+  override def meta = Country
+  object population extends MongoMapField[Country,Int](this)
+}
+
+object Country extends Country with MongoMetaRecord[Country] {
+  override def collectionName = "example.earth"
+}
+-------------------------------------------------------------------------------
+
+在这个例子中, 我们建立了一个Record来存储Country的信息. 在这里, `population` 是一个映射, 从 `String` 建到 `Integer` 值.
+
+我们可以在snippet中这样使用:
+
+[source,scala]
+-------------------------------------------------------------------------------
+class Places {
+
+  val uk = Country.find("uk") openOr {
+    val info = Map(
+      "Brighton" -> 134293,
+      "Birmingham" -> 970892,
+      "Liverpool" -> 469017)
+
+    Country.createRecord.id("uk").population(info).save
+  }
+
+  def facts = "#facts" #> (
+    for { (name,pop) <- uk.population.is } yield
+      ".name *" #> name & ".pop *" #> pop
+  )
+}
+-------------------------------------------------------------------------------
+
+当这个snippet被调用时, 它会查找一个record通过使用 `_id` 的 "uk" 或者创建它通过一些加工后的信息. HTML模版可以这样调用它:
+
+[source,html]
+------------------------------------------------------------------
+<div data-lift="Places.facts">
+ <table>
+  <thead>
+   <tr><th>City</th><th>Population</th></tr>
+  </thead>
+  <tbody>
+   <tr id="facts">
+    <td class="name">Name here</td><td class="pop">Population</td>
+   </tr>
+  </tbody>
+ </table>
+</div>
+------------------------------------------------------------------
+
+在Mongo数据库中, 数据是这样存储的:
+
+------------------------------------------------------
+$ mongo cookbook
+MongoDB shell version: 2.0.6
+connecting to: cookbook
+> show collections
+example.earth
+system.indexes
+> db.example.earth.find().pretty()
+{
+  "_id" : "uk",
+  "population" : {
+    "Brighton" : 134293,
+    "Birmingham" : 970892,
+    "Liverpool" : 469017
+  }
+}
+------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+如果你不给映射一个值, 默认的将是一个空映射, 在Mongo中这样表示:
+
+----------------------------------------
+({ "_id" : "uk", "population" : { } })
+----------------------------------------
+
+你也可以mark它为一个可选的映射:
+
+[source,scala]
+-------------------------------------------------------------------
+object population extends MongoMapField[Country,Int](this) {
+  override def optional_? = true
+}
+-------------------------------------------------------------------
+
+如果你现在写一个document而不包含 `population`, 在Mongo中将是这样:
+
+-------------------------------------------------------------------
+> db.example.earth.find();
+{ "_id" : "uk" }
+-------------------------------------------------------------------
+
+为了在你的snippet中添加一个data到映射, 你可以修改一个record, 建立一个新的 `Map`:
+
+[source,scala]
+-------------------------------------------------------------------
+uk.population(uk.population.is + ("Westminster"->81766)).update
+-------------------------------------------------------------------
+
+请注意, 我们使用 `update` 在这里, 而不是 `save`.  方法 `save` 非常聪明, 并且将会插入一个新的document到数据库中, 或者替换一个现有的值通过匹配它的 `_id`. Update是不一样的: 它将只会检查document中改变的域, 然后更新它. 上面的语句将会使用以下的Mongo语句:
+
+-------------------------------------------------------------------
+{ "$set" : { "population" : { "Brighton" : 134293 , "Liverpool" : 469017 ,
+  "Birmingham" : 970892 , "Westminster" : 81766} }
+-------------------------------------------------------------------
+
+所以这里, 你使用 `update` 而不是 `save` 来更新一个已经存在的信息.
+
+为了访问一个映射中独立的元素, 你可以使用 `get` (或者 `value`):
+
+[source,scala]
+----------------------------------------------
+uk.population.get("San Francisco")
+// will throw java.util.NoSuchElementException
+----------------------------------------------
+
+或者你可以通过使用标准的Scala映射接口:
+
+[source,scala]
+------------------------------------------------------------
+val sf : Option[Int] = uk.population.is.get("San Francisco")
+------------------------------------------------------------
+
+`MongoMapField` 能包含什么
++++++++++++++++++++++++++
+
+你应该知道, `MongoMapField` 只支持primitive types.
+
+在这章中, 使用的类型为 `String => Int`. 但是, Mongo也允许你使用一个mix的类型, 比如 `String` 或者一个 `Boolean`作为population的值. 如果你修改Mongo Record在数据库, 而不是Lift, 你将会得到一个`java.lang.ClassCastException` 在runtime中.
+
+See Also
+^^^^^^^^
+
+在邮件列表上, 有关于 `MongoMapField` 支持类型限制的讨论, 并且一个可行的方法是重载`asDBObject`, 你可以在以下地址找到: https://groups.google.com/d/msg/liftweb/XoseG-8mIPc/OLyIu6FrHIgJ[https://groups.google.com/d/msg/liftweb/XoseG-8mIPc/OLyIu6FrHIgJ].
+
+
+[[MongoEmbedding]]
+在一个Document中镶嵌一个Mongo Record
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有一个Mongo Record, 你想镶嵌另一个值的集合到里面, 并且作为一个整体.
+
+Solution
+^^^^^^^^
+
+使用 `BsonRecord` 来定义镶嵌的元素, 然后使用`BsonRecordField`镶嵌它. 这里有一个存储一个照片的信息的例子:
+
+[source,scala]
+-----------------------------------------------------
+import net.liftweb.record.field.{IntField,StringField}
+
+class Image private () extends BsonRecord[Image] {
+  def meta = Image
+  object url extends StringField(this, 1024)
+  object width extends IntField(this)
+  object height extends IntField(this)
+}
+
+object Image extends Image with BsonMetaRecord[Image]
+-----------------------------------------------------
+
+我可以引用 `Image` 的实例, 通过调用 `BsonRecordField`:
+
+
+[source,scala]
+------------------------------------------------------------------------------
+class Country private () extends MongoRecord[Country] with StringPk[Country] {
+  override def meta = Country
+  object flag extends BsonRecordField(this, Image)
+}
+
+object Country extends Country with MongoMetaRecord[Country] {
+  override def collectionName = "example.earth"
+}
+------------------------------------------------------------------------------
+
+为了加入一个值:
+
+[source,scala]
+-----------------------------------------------------------------------------
+val unionJack =
+  Image.createRecord.url("http://bit.ly/unionflag200").width(200).height(100)
+
+Country.createRecord.id("uk").flag(unionJack).save(true)
+-----------------------------------------------------------------------------
+
+在Mongo中, 结果是:
+
+-----------------------------------------
+> db.example.earth.findOne()
+{
+  "_id" : "uk",
+  "flag" : {
+    "url" : "http://bit.ly/unionflag200",
+    "width" : 200,
+    "height" : 100
+  }
+}
+-----------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+如果你不给镶嵌的document一个值, 结果是:
+
+[source,javascript]
+---------------------------------------------------
+"flag" : { "width" : 0, "height" : 0, "url" : "" }
+---------------------------------------------------
+
+你可以防止以上情况, 通过使用默认的值:
+
+[source,scala]
+---------------------------------------------------
+object image extends BsonRecordField(this, Image) {
+  override def optional_? = true
+}
+---------------------------------------------------
+
+通过使用 `optional_?`, document将不会被存储, 如果你不给image一个值. 在Scala中, 你会想调用 `valueBox`:
+
+[source,scala]
+---------------------------------------
+val img : Box[Image] = uk.flag.valueBox
+---------------------------------------
+
+事实上, 无论`optional_?`的设置是什么, 你都可以访问值, 通过使用 `valueBox`.
+
+另一个方法是你可以设置一个默认的值:
+
+[source,scala]
+-----------------------------------------------------------------------------
+object image extends BsonRecordField(this, Image) {
+ override def defaultValue =
+  Image.createRecord.url("http://bit.ly/unionflag200").width(200).height(100)
+}
+-----------------------------------------------------------------------------
+
+See Also
+^^^^^^^^
+
+Lift Wiki有关于BsonRecord更多的介绍: https://www.assembla.com/spaces/liftweb/wiki/Mongo_Record_Embedded_Objects[https://www.assembla.com/spaces/liftweb/wiki/Mongo_Record_Embedded_Objects].
+
+
+
+
+连接两个Mongo Record
+~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有一个Mongo Record, 你想连到到另一个.
+
+Solution
+^^^^^^^^
+
+建立一个引用, 通过使用 `MongoRefField`, 比如说 `ObjectIdRefField` 或者
+`StringRefField`, 然后通过使用 `obj` 来连接.
+
+作为例子, 我们建立一个包含所有国家的Record, 然后我们连接国家到相关的植物:
+
+[source,scala]
+------------------------------------------------------------------------------
+class Planet private() extends MongoRecord[Planet] with StringPk[Planet] {
+  override def meta = Planet
+  object review extends StringField(this,1024)
+}
+
+object Planet extends Planet with MongoMetaRecord[Planet] {
+  override def collectionName = "example.planet"
+}
+
+class Country private () extends MongoRecord[Country] with StringPk[Country] {
+  override def meta = Country
+  object planet extends StringRefField(this, Planet, 128)
+}
+
+object Country extends Country with MongoMetaRecord[Country] {
+  override def collectionName = "example.country"
+}
+------------------------------------------------------------------------------
+
+在下面的Snippet中, 我们建立连接:
+
+[source,scala]
+-----------------------------------------------------------------------------
+class HelloWorld {
+
+  val uk = Country.find("uk") openOr {
+    val earth = Planet.createRecord.id("earth").review("Harmless").save
+    Country.createRecord.id("uk").planet(earth.id.is).save
+  }
+
+  def facts =
+    ".country *" #> uk.id &
+    ".planet" #> uk.planet.obj.map { p =>
+      ".name *" #> p.id &
+      ".review *" #> p.review }
+  }
+-----------------------------------------------------------------------------
+
+对于 `uk` 的值, 我们查找一个现存的Record, 或者建立一个新的, 如果没有现存的. 请注意, `earth` 是一个独立的Mongo Record, 它有一个引用在 `planet` 的id上.
+
+检索引用, 通过使用 `obj` 方法, 它将返回一个 `Box[Planet]` 在这个例子中.
+
+Discussion
+^^^^^^^^^^
+
+当你调用 `obj` 方法在一个 `MongoRefField`上时, 被引用的部分将被fetch.你可以通过打开Mongo上的Log来观察这个行为. 你可以添加以下代码到 `Boot.scala`:
+
+[source,scala]
+-----------------------------------------
+System.setProperty("DEBUG.MONGO", "true")
+System.setProperty("DB.TRACE", "true")
+-----------------------------------------
+
+第一次你运行以上代码的时候, 你将会看到:
+
+----------------------------------------------------------------------------
+INFO: find: cookbook.example.country { "_id" : "uk"}
+INFO: update: cookbook.example.planet { "_id" : "earth"} { "_id" : "earth" ,
+    "review" : "Harmless"}
+INFO: update: cookbook.example.country { "_id" : "uk"} { "_id" : "uk" ,
+    "planet" : "earth"}
+INFO: find: cookbook.example.planet { "_id" : "earth"}
+----------------------------------------------------------------------------
+
+在这里你看到的是初始的对于"uk"的查找, 接下来是建立 "earth" record 和 存储 "uk" record. 最后, 还有一个对 "earth" 的查找, 当 `uk.obj` 被 `fact` 方法调用.
+
+方法 `obj` 将会缓存 `planet` 引用. 这意味着你可以这样...
+
+[source,scala]
+------------------------------------------
+".country *" #> uk.id &
+".planet *" #> uk.planet.obj.map(_.id) &
+".review *" #> uk.planet.obj.map(_.review)
+------------------------------------------
+
+...尽管你调用'obj'很多次, 但是你只会见到一个关于 "earth" record的语句. 这就意味着, 如果你调用的 "earth" record在Mongo的另一处被改变, 在你调用了 `obj` 后你将不会看到 `uk.obj` 的改变, 除非你重载`uk`record.
+
+编写关于引用的语句
+++++++++++++++++
+
+通过一个引用, 搜索Record是非常简单的:
+
+[source,scala]
+------------------------------------------------------------------------------
+val earth : Planet = ...
+val onEarth : List[Country]= Country.findAll(Country.planet.name, earth.id.is)
+------------------------------------------------------------------------------
+
+或者, 在这个例子中, 因为我们有 `String` 引用, 我们可以这样:
+
+[source,scala]
+--------------------------------------------------------------------------
+val onEarth : List[Country]= Country.findAll(Country.planet.name, "earth")
+--------------------------------------------------------------------------
+
+
+更新和删除
++++++++++
+
+像你期望的一样, 更新一个引用:
+
+[source,scala]
+----------------------------------------------------------
+uk.planet.obj.foreach(_.review("Mostly harmless.").update)
+----------------------------------------------------------
+
+以上语句的结果是:
+
+---------------------------------------------------------------------
+INFO: update: cookbook.example.planet { "_id" : "earth"} { "$set" : {
+   "review" : "Mostly harmless."}}
+---------------------------------------------------------------------
+
+一个 `uk.planet.obj` 调用将会返回一个有新的review的植物.
+
+或者你可以替换引用为另一个:
+
+[source,scala]
+-----------------------------------------------------------------------
+uk.planet( Planet.createRecord.id("mars").save.id.is ).save
+-----------------------------------------------------------------------
+
+请注意, 引用是通过id连接的 (`save.id.is`), 不是record本身.
+
+
+为了取消引用:
+
+[source,scala]
+-----------------------------------------------------------------------
+uk.planet(Empty).save
+-----------------------------------------------------------------------
+
+它将会移除连接, 但是Mongo Record的指针还是存在的.如果你移除了一个引用, 然后调用 `obj` 将会返回一个 `Empty` box.
+
+连接的类型
++++++++++
+
+这个例子使用 `StringRefField` 作为 Mongo records,使用 `String` 作为 `_id`. 另外引用类型为:
+
+* `ObjectIdRefField` -- 也许是最常用的引用类型, 当你想通过`ObjectId`作为引用时, 你可以使用它.
+* `UUIDRefField` -- 适用于那些id基于 `java.util.UUID`的record.
+* `StringRefField` -- 就像这章的例子一样, 当你的id为`String`时.
+* `IntRefField` 和 `LongRefField` -- 当你想使用一个数值作为ID时.
+
+See Also
+^^^^^^^^
+
+10Gen Inc's _数据模型决策_ 解释了镶嵌文档和引用文档的不同. 你可以找到更多信息在: http://docs.mongodb.org/manual/core/data-modeling/[http://docs.mongodb.org/manual/core/data-modeling/].
+
+
+
+[[QueryingWithRogue]]
+使用 Rogue
+~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用Foursquare的 type-safe domain specific language (DSL), Rogue, 来编写语句和更新Mongo records.
+
+Solution
+^^^^^^^^
+
+你需要包含Rogue的依赖库在你的编译中.
+
+首先, 编辑 `build.sbt` 和添加:
+
+[source, scala]
+---------------------------------------------
+"com.foursquare" %% "rogue" % "1.1.8" intransitive()
+---------------------------------------------
+
+在你的代码 `import com.foursquare.rogue._` 然后开始用Rogue.  比如说, 使用Scala console (see <<MongoScalaConsole>>):
+
+[source, scala]
+---------------------------------------------
+scala> import com.foursquare.rogue.Rogue._
+import com.foursquare.rogue.Rogue._
+
+scala> import code.model._
+import code.model._
+
+scala> Country.where(_.id eqs "uk").fetch
+res1: List[code.model.Country] = List(class code.model.Country={_id=uk,
+  population=Map(Brighton->134293, Liverpool->469017, Birmingham->970892)})
+
+scala> Country.where(_.id eqs "uk").count
+res2: Long = 1
+
+scala> Country.where(_.id eqs "uk").
+  modify(_.population at "Brighton" inc 1).updateOne()
+
+---------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+Rogue能使用你Lift Record中的信息, 提供了一个优雅的方法来编写Mongo语句. 它是类型安全的, 这意味着, 比如说, 如果你常识使用一个 `Int` 在 `String` 类型上, Mongo将会允许运行这个语句, 但是在runtime上无法找到结果, 但是Rogue会拒绝编译这类语句.
+
+[source, scala]
+---------------------------------------------
+scala> Country.where(_.id eqs 7).fetch
+<console>:20: error: type mismatch;
+ found   : Int(7)
+ required: String
+              Country.where(_.id eqs 7).fetch
+---------------------------------------------
+
+DSL建立了一个语句, 它在 `fetch` 后会发送给 MongoDB. 最后的一个方法, `fetch`, 只是运行一段语句的方法之一. 其他的方法包括:
+
+* `count` -- 告诉Mongo返回结果的数量.
+
+* `countDistinct` -- 不同的值在返回结果的数量.
+
+* `exists` -- 如果存在满足query的结果, 返回true.
+
+* `get` --  返回一个 `Option[T]` 从提供的Query.
+
+* `fetch(limit: Int)` -- 类似 `fetch` 但是返回 `limit` 数量的结果.
+
+* `updateOne`, `updateMulti`, `upsertOne` 和 `upsertMulti` -- 修改符合query的, 一个单一的document, 或者全部 documents.
+
+* `findAndDeleteOne` and `bulkDelete_!!` -- 删除record.
+
+Query语言本身是很昂贵的, 最好测试不同query语言的地方是使用 `QueryTest` 特性在Rogue中.  你可以通过看它的Github上的README文件来学习.
+
+
+[NOTE]
+Rogue v2 版本有很多新的特性. 如果你想尝试它, 请看Rogue的邮件列表: https://groups.google.com/d/topic/rogue-users/SdtFCU-w3ng/[https://groups.google.com/d/topic/rogue-users/SdtFCU-w3ng/].
+
+
+See Also
+^^^^^^^^
+
+对于 geospacial queries, 请见 <<MongoGeospatial>>.
+
+Rogue的README文件是一个对于新手来说很好的学习材料, 里面有一个链接是关于 `QueryTest`, 里面有很多实用的例子: https://github.com/foursquare/rogue[https://github.com/foursquare/rogue].
+
+使用并开发Rogue的动机在以下有解释: http://engineering.foursquare.com/2011/01/21/rogue-a-type-safe-scala-dsl-for-querying-mongodb/[http://engineering.foursquare.com/2011/01/21/rogue-a-type-safe-scala-dsl-for-querying-mongodb/].
+
+
+
+
+[[MongoGeospatial]]
+存储地理空间的数据
+~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想在Mongo中存储经度和纬度.
+
+Solution
+^^^^^^^^
+
+使用 Rogue的 `LatLong` 类来存储地理信息在你的model中. 比如说, 我们可以存储一个城市的地理信息:
+
+[source,scala]
+-----------------------------------------------
+import com.foursquare.rogue.Rogue._
+import com.foursquare.rogue.LatLong
+
+class City private () extends MongoRecord[City] with ObjectIdPk[City] {
+  override def meta = City
+
+  object name extends StringField(this, 60)
+
+  object loc extends MongoCaseClassField[City, LatLong](this)
+}
+
+object City extends City with MongoMetaRecord[City] {
+  import net.liftweb.mongodb.BsonDSL._
+  ensureIndex(loc.name -> "2d", unique=true)
+
+  override def collectionName = "example.city"
+}
+-----------------------------------------------
+
+我们可以这样存储一个位置:
+
+[source,scala]
+-----------------------------------------------------------
+val place = LatLong(50.819059, -0.136642)
+val city = City.createRecord.name("Brighton, UK").loc(pos).save(true)
+-----------------------------------------------------------
+
+这将会生成一个数据:
+
+[source,javascript]
+---------------------------------------------------
+{
+  "_id" : ObjectId("50f2f9d43004ad90bbc06b83"),
+  "name" : "Brighton, UK",
+  "loc" : {
+    "lat" : 50.819059,
+    "long" : -0.136642
+  }
+}
+---------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+MongoDB 提供一个 _geospatial indexes_, 我们使用它做两件事情.  首先, 我们存储地理信息到一个Mongo许可的格式. 这个格式可以包含坐标. 我们还使用一个有两个数值的数组表达点.
+
+其次, 我们建立了一个为 "2d" 的检索, 它将允许我们使用Mongo自带的方法, 比如说 `$near` 和as `$within`. 语句 `unique=true` 在 `ensureIndex` 中高亮, 意味着你可以控制是否为唯一 (`true`, 没有重复) 或者no (`false`).
+
+关于唯一的检索, 你会发现, 在这个例子中, 当我们调用 `save(true)` 在 `City` 上, 而不是单纯的 `save` 像其他章一样. 我们可以使用 `save`, 而且工作的很好, 但是不同的是 `save(true)` 提升了等级从 "normal" 到 "safe".
+
+调用 `save` 会在请求发送到Mongo服务器上后返回. 这会让你觉得 `save` 在网路掉线时, 会失败. 然而, 这不意味着服务器不处理这个请求.  比如说, 如果我们插入一个地理信息和服务器上的已有信息完全一样, 检索将发现, 并拒绝. 如果只使用 `save` (或者 `save(false)`) 我们的Lift应用将不会收到这个错误, 请求将会悄悄地停止. 如果你对 "safe" 更关心, 那么使用 `save(true)` ,直到Mongo服务器返回, 这意味着应用将收到一些异常.
+
+作为一个例子, 如果我们尝试插入一个重复的city, 我们调用 `save(true)` 将会有以下结果:
+
+[source,scala]
+-----------------------------------------------------------
+com.mongodb.MongoException$DuplicateKey: E11000 duplicate key
+  error index: cookbook.example.city.$loc_2d
+-----------------------------------------------------------
+
+你也可以使用其他类型的 `save`, 比如说以 `WriteConcern` 为参数.
+
+如果你想删除一个检索, Mongo的命令为:
+
+-----------------------------------------------------------
+db.example.city.dropIndex( "loc_2d" )
+-----------------------------------------------------------
+
+
+编写语句
++++++++
+
+我们在这章使用Rogue的 `LatLong` 类的原因是让我们使用Rogue DSL来编写语句. 假设我们插入其他city到我们的collection中:
+
+
+-----------------------------------------------------------
+> db.example.city.find({}, {_id:0} )
+{"name": "London, UK", "loc": {"lat": 51.5, "long": -0.166667} }
+{"name": "Brighton, UK", "loc": {"lat": 50.819059, "long": -0.136642} }
+{"name": "Paris, France", "loc": {"lat": 48.866667, "long": 2.333333} }
+{"name": "Berlin, Germany", "loc": {"lat": 52.533333, "long": 13.416667} }
+{"name": "Sydney, Australia", "loc": {"lat": -33.867387, "long": 151.207629} }
+{"name": "New York, USA", "loc": {"lat": 40.714623, "long": -74.006605} }
+-----------------------------------------------------------
+
+我们现在可以找到方圆500千米内, 临近伦敦的城市:
+
+[source,scala]
+-----------------------------------------------------------
+import com.foursquare.rogue.{LatLong, Degrees}
+
+val centre = LatLong(51.5, -0.166667)
+val radius = Degrees( (500 / 6378.137).toDegrees )
+val nearby = City.where( _.loc near (centre.lat, centre.long, radius) ).fetch()
+-----------------------------------------------------------
+
+你可以这样编写语句...
+
+-----------------------------------------------------------
+{ "loc" : { "$near" : [ 51.5 , -0.166667 , 4.491576420597608]}}
+-----------------------------------------------------------
+
+...以上语句将定位 London, Brighton 和 Paris 在 London 附近.
+
+这个语句的格式是, 找到中心点和半径, 然后找到其中的city. 我们可以这样计算半径, 用500km除以地球的半径, 大概是6378km, 然后会得到一个夹角. Rogue可以使用它作为 `Degrees`.
+
+
+See Also
+^^^^^^^^
+
+Mongo DB上有很多关于地理信息检索的文档: http://docs.mongodb.org/manual/core/geospatial-indexes/[http://docs.mongodb.org/manual/core/geospatial-indexes/].
+
+你可以学到更多关于写入: http://docs.mongodb.org/manual/core/write-operations/[http://docs.mongodb.org/manual/core/write-operations/], 和更多不同的 `save`: http://api.mongodb.org/java/current/[http://api.mongodb.org/java/current/].
+
+
+
+
+
+
+[[MongoScalaConsole]]
+在Scala控制台运行语句
+~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想互动地使用一些语句, 然后即时看到效果.
+
+Solution
+^^^^^^^^
+
+打开你的工程, 然后打开你的控制台, 调用 `boot()`, 然后和你的model互动.
+
+比如说, 使用Mongo Record开发, 作为 <<ConnectingToMongo>> 的一部分, 我们可以使用以下基本语句:
+
+---------------------------------------------
+$ sbt
+...
+> console
+[info] Compiling 1 Scala source to /cookbook_mongo/target/scala-2.9.1/classes...
+[info] Starting scala interpreter...
+[info]
+Welcome to Scala version 2.9.1.final ...
+Type in expressions to have them evaluated.
+Type :help for more information.
+
+scala> import bootstrap.liftweb._
+import bootstrap.liftweb._
+
+scala> new Boot().boot
+
+scala> import code.model._
+import code.model._
+
+scala> Country.findAll
+res2: List[code.model.Country] = List(class code.model.Country={_id=uk,
+  population=Map(Brighton -> 134293, Liverpool -> 469017,
+  Birmingham -> 970892)})
+
+scala> :q
+---------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+在 `Boot` 中运行一切也许会变得简单, 特别是当你使用后台程序的时候. 所有我们需要做的, 只是设置一个数据库连接. 比如说, 使用 <<ConnectingToMongo>> 中的例子, 我们可以这样初始化一个连接:
+
+---------------------------------------------
+scala> import bootstrap.liftweb._
+import bootstrap.liftweb._
+
+scala> import net.liftweb.mongodb._
+import net.liftweb.mongodb._
+
+scala> MongoUrl.defineDb(DefaultMongoIdentifier,
+  "mongodb://127.0.0.1:27017/cookbook")
+
+scala> Country.findAll
+res2: List[code.model.Country] = List(class code.model.Country={_id=uk,
+  population=Map(Brighton -> 134293, Liverpool -> 469017,
+    Birmingham -> 970892)})
+---------------------------------------------
+
+
+See Also
+^^^^^^^^
+
+<<ConnectingToMongo>> 中有如何连接到Mongo的介绍, <<QueryingWithRogue>> 有如何使用Rogue的介绍.
+
+
+
+[[MongoUnitTest]]
+Unit Testing Record
+~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想写一些 unit tests 在你的Lift Record代码上, 并且使用Mongodb.
+
+Solution
+^^^^^^^^
+
+使用 Specs2 testing framework, 它会建立连接对于每一个测试, 然后在测试完成后摧毁连接.
+
+建立一个Scala trait来建立和摧毁一个对Mongo的连接.  我们把这个trait融合到你的设置中:
+
+[source, scala]
+--------------------------------------------
+import net.liftweb.http.{Req, S, LiftSession}
+import net.liftweb.util.StringHelpers
+import net.liftweb.common.Empty
+import net.liftweb.mongodb._
+import com.mongodb.ServerAddress
+import com.mongodb.Mongo
+import org.specs2.mutable.Around
+import org.specs2.execute.Result
+
+trait MongoTestKit {
+
+  val server = new Mongo(new ServerAddress("127.0.0.1", 27017))
+
+  def dbName = "test_"+this.getClass.getName
+    .replace(".", "_")
+    .toLowerCase
+
+  def initDb() : Unit = MongoDB.defineDb(DefaultMongoIdentifier, server, dbName)
+
+  def destroyDb() : Unit = {
+    MongoDB.use(DefaultMongoIdentifier) { d => d.dropDatabase() }
+    MongoDB.close
+  }
+
+  trait TestLiftSession {
+    def session = new LiftSession("", StringHelpers.randomString(20), Empty)
+    def inSession[T](a: => T): T = S.init(Req.nil, session) { a }
+  }
+
+  object MongoContext extends Around with TestLiftSession {
+    def around[T <% Result](testToRun: =>T) = {
+      initDb()
+      try {
+        inSession {
+          testToRun
+        }
+      } finally {
+        destroyDb()
+      }
+    }
+  }
+
+}
+--------------------------------------------
+
+这个trait提供一个连接通道到一个本地运行的Mongo服务器中, 然后建立一个数据库基于它mix的类. 一个值得注意的地方是, `MongoContext` 确保了 `around` 你的设置是已经被初始化后的, 并且在你的测试完成后, 它会摧毁连接.
+
+为了使用它, 混入一个设置中:
+
+[source, scala]
+--------------------------------------------
+import org.specs2.mutable._
+
+class MySpec extends Specification with MongoTestKit {
+
+  sequential
+
+  "My Record" should {
+
+    "be able to create records" in MongoContext {
+      val r = MyRecord.createRecord
+      // ...your useful test here...
+      r.valueBox.isDefined must beTrue
+    }
+
+  }
+}
+--------------------------------------------
+
+你现在可以运行SBT, 通过使用 `test`:
+
+------------------------------------------------------------
+> test
+[info] Compiling 1 Scala source to target/scala-2.9.1/test-classes...
+[info] My Record should
+[info] + be able to create records
+[info]
+[info]
+[info] Total for specification MySpec
+[info] Finished in 1 second, 199 ms
+[info] 1 example, 0 failure, 0 error
+[info]
+[info] Passed: : Total 1, Failed 0, Errors 0, Passed 0, Skipped 0
+[success] Total time: 1 s, completed 03-Jan-2013 22:47:54
+-----------------------------------------------------------
+
+
+Discussion
+^^^^^^^^^^
+
+一般情况下, Lift提供了所有你需要来连接, 测试和运行MongoDB的支持.如果没有一个运行的Lift程序, 我们需要确保当我们运行测试时, Mongo的配置是正确的, 这就是trait `MongoTestKit` 提供给我们的服务.
+
+在测试中, 一个不常用的部分是使用 `TestLiftSession`. 它提供了一个空会话在你的测试中, 这十分有用, 特别是你想测试一些stateful的代码 (比如说, 关于 `S` 的). 它不是Record必须使用的代码, 但是在这里, 比如说你想测试用户登入的时候, 你需要它.
+
+这里有一些使用SBT测试的小技巧. 运行 `test` 将会运行所有你工程中的测试. 如果你想运行一个测试, 你可以:
+
+------------------------------------------------------------
+> test-only org.example.code.MySpec
+------------------------------------------------------------
+
+这个命令同样支持掩码, 如果我们只想运行所有以 "Mongo" 开头的测试, 我们可以:
+
+------------------------------------------------------------
+> test-only org.example.code.Mongo*
+------------------------------------------------------------
+
+还有一个 `test-quick` 方法(在 SBT 0.12 中), 它只运行没有运行过的测试, 被改变过的测试, 或者上一次失败的测试 并且 `~test` 命令可以观看测试的改变和运行他们.
+
+`test-only` 与 `around` 在 `MongoTestKit` 中一起使用, 是一个好的测试和跟踪你的测试的方法. 通过关闭 `destroyDb()` 调用, 你可以在一个测试运行时, 跳转到MongoDB shell, 并且测试数据库的状态.
+
+你可以通过设置一个你想删除的collection, 来避免每次测试后全部删除. 你可以使用一个预先设置的collection, 然后替换 `destroyDb` 方法:
+
+[source, scala]
+--------------------------------------------
+lazy val collections : List[MongoMetaRecord[_]] = List(MyRecord)
+
+def destroyDb() : Unit = {
+  collections.foreach(_ bulkDelete_!! new BasicDBObject)
+  MongoDB.close
+}
+--------------------------------------------
+
+请注意, 这里的collection列表为 `lazy`, 这是为了避免Record在我们运行数据库连接前运行.
+
+
+清理数据库
++++++++++
+
+在我们每次使用数据库后, 我们可以简单的删除数据库, 然后下次我们使用时, 它便是一个空的数据库. 在一些情况下, 你不能这样做. 比如说, 你运行一些测试, 而数据库是建立在MongoHQ 或者MongoLabs上的. 如果你删除数据库, 你下次将不能再连入它.
+
+平行测试
++++++++
+
+如果你的测试改变了数据, 并且有可能改变的数据需要和别的测试互动, 你会想让SBT停止平行运行你的测试. 一个简单的发现这种情况的方法是, 你会发现你的测试时而成功, 时而失败, 或者一个原本成功的测试, 在你添加了一些测试后失败. 你可以通过添加以下一句到 `build.sbt`:
+
+[source, scala]
+--------------------------------------------
+parallelExecution in Test := false
+--------------------------------------------
+
+你会发现, 这个例子的设置中有: `sequential`. 它默认的禁止了所有平行测试.
+
+
+在IDE中运行测试
+++++++++++++++
+
+IntelliJ IDEA 检查并且允许你使用Specs2. 在 Eclipse 中, 你将需要包含JUnit测试声明在你的设置中, 如下:
+
+[source, scala]
+--------------------------------------------
+import org.junit.runner.RunWith
+import org.specs2.runner.JUnitRunner
+
+@RunWith(classOf[JUnitRunner])
+class MySpec extends Specification with MongoTestKit  {
+...
+--------------------------------------------
+
+然后, 你可以使用 "Run As...".
+
+See Also
+^^^^^^^^
+
+Specs2 的文档在: http://specs2.org/[http://specs2.org/].
+
+如果你更喜欢使用Scala的测试架构 (http://www.scalatest.org[http://www.scalatest.org]), 请看 Tim Nelson's _Mongo Auth_ Lift module 在 https://github.com/eltimn/lift-mongoauth[https://github.com/eltimn/lift-mongoauth]. 它包含了如何使用它在Mongo环境下. 里面很多Tim写的内容, 在这章的 Specs2 中也有.
+
+Lift Mongo Record library 包含了一个 Specs2, 使用 `Before` 和 `After` 而不是这章中的 `around`. 如果你更喜欢它, 你可以在以下地方找到代码: https://github.com/lift/framework/tree/master/persistence/mongodb-record/src/test/scala/net/liftweb/mongodb/record[https://github.com/lift/framework/tree/master/persistence/mongodb-record/src/test/scala/net/liftweb/mongodb/record].
+
+Flapdoodle (https://github.com/flapdoodle-oss/embedmongo.flapdoodle.de[https://github.com/flapdoodle-oss/embedmongo.flapdoodle.de] 提供了一个能自动下载, 清理, 安装MongoDB的功能. 这个自动化工具可以让你包裹你的Unit Test在Specs2中, 并且一个 Specs2 集成包含在里面, 比如说 `Before` 和 `After` 工具: https://github.com/athieriot/specs2-embedmongo[https://github.com/athieriot/specs2-embedmongo].
+
+测试的接口是由SBT提供的, 比如说命令 `test`, 它也提供了分享测试, 和对每个测试进行单独的配置的功能. 你可以察看更多设置在以下文档: http://www.scala-sbt.org/release/docs/Detailed-Topics/Testing[http://www.scala-sbt.org/release/docs/Detailed-Topics/Testing].
+
+Lift Wiki介绍了更多关于unit test和Lift会话:https://www.assembla.com/wiki/show/liftweb/Unit_Testing_Snippets_With_A_Logged_In_User[https://www.assembla.com/wiki/show/liftweb/Unit_Testing_Snippets_With_A_Logged_In_User].
+
+
+
+

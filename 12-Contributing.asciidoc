@@ -1,0 +1,431 @@
+[[ContributingAndHelp]]
+贡献, Bug 报告 和 寻找帮助
+-------------------------
+
+
+[[GettingHelp]]
+你需要一些帮助
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有一些无法解决的问题, 需要一些Lift的帮助.
+
+Solution
+^^^^^^^^
+
+在Lift的Google邮件列表上问问题: https://groups.google.com/group/liftweb[https://groups.google.com/group/liftweb].
+
+Discussion
+^^^^^^^^^^
+
+你将会找到一些帮助在StackOverFlow, Quora和别的地方, 但是邮件列表是最好的, 获得最正确帮助的地方. 你可以搜索以前的帖子来看是否你的问题已经被解答过, 但是希望你的问问题的方法能很好的帮助解答你的人了解你的情况. 而且这本书的内容很多都是在邮件列表上问过的问题.
+
+新会员在邮件列表上的发帖是被限制的, 这是为了防止垃圾邮件. 所以当你第一次发帖, 你会发现你的帖子会在几个小时后才显示在列表中
+
+See Also
+^^^^^^^^
+
+Lift的社区决定了Lift的未来. 请在发帖前, 看以下的文章 http://liftweb.net/community[http://liftweb.net/community]. 你将会的到一个很好的帮助, 如果你使用正确发帖的方法.
+
+如果你需要一个付费的咨询, 开发或者SLA支持. 这里是一个商业支持的邮件列表: https://www.assembla.com/spaces/liftweb/wiki/Commercial_Support[https://www.assembla.com/spaces/liftweb/wiki/Commercial_Support].
+
+
+[[HowToReportBugs]]
+如何报告Bugs
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你找到一个Bug, 你想报告给Lift社区.
+
+Solution
+^^^^^^^^
+
+请把Bug发送给邮件列表上, 并且附上你为什么觉得这是Bug和你希望看到的结果.
+
+请先看已经存在的Ticket是否已经包含你的Bug, 请不要发起一个Ticket, 除非一个Lift委员让你这样做.
+
+Discussion
+^^^^^^^^^^
+
+[quote, David Pollack, http://lift.la/expected-behavior-in-the-lift-community]
+____
+If Lift is not behaving as you expect, please ask questions about what
+you're seeing. The ideal form of these questions is "When I do X, my
+Lift app does Y, but I expect it to do Z, why?" This provides a set of
+language to discuss your application and the way that Lift responds to
+requests. Perhaps there's a way of improving Lift. Perhaps there's a
+concept that's different in Lift than you might be used to. Perhaps
+there's a documentation issue that can help bridge the gap between what
+Lift is doing and what you expect it to do. Most importantly, just
+because Lift is behaving differently than you expect it to, it's not
+necessarily a bug in Lift.
+____
+
+一个很好得到帮助的方法是制作一个简单的例子, 里面包含了你的Bug, 然后发送它到Github. 并且里面包含了Bug的位置, 和你希望看到的结果. 这样可以让更多人知道Bug的具体情况.
+
+
+See Also
+^^^^^^^^
+
+你可以找到一个ticket的列表在: http://ticket.liftweb.net/[http://ticket.liftweb.net/].
+
+如果你想知道如何制作一个包含Bug的例子. 请看: http://www.assembla.com/wiki/show/liftweb/Posting_example_code[http://www.assembla.com/wiki/show/liftweb/Posting_example_code].
+
+如果你找到了一个bug, 并且Lift的委员同意你建立一个ticket, 最重要的事情是你需要包含一个邮件列表关于这个bug的讨论的链接, 请看: http://www.assembla.com/wiki/show/liftweb/Creating_tickets[http://www.assembla.com/wiki/show/liftweb/Creating_tickets].
+
+
+[[LiftCodeContributions]]
+贡献小段代码和ScalaDocs
+~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有一小段代码或者ScalaDocs的改进, 你想把它们放入Lift中.
+
+Solution
+^^^^^^^^
+
+你可以提供一个pull requests 在Github上, 你的改变必须满足以下条件之一:
+
+* 它是一个注释的改变.
+* 它是一个例子代码.
+* 它是一个 _小_ 的改变, 增强, 或者弥补bug的代码.
+
+你的pull request必须包含你的签名在你的 `contributors.md` 文件下面.
+
+
+Discussion
+^^^^^^^^^^
+
+Lift有严格的贡献者政策, 不接受任何除贡献者以外的人贡献的代码, 贡献者需要首先签署一个版本声明到Lift中. 这个政策保护了那些使用Lift作为商业开发的公司.
+
+安全是最重要的. 所以如果你想贡献代码, 请看签署以下声明:
+
+[quote]
+____
+By submitting this pull request which includes my name and email address (the email address may be in a non-robot readable format), I agree that the entirety of the contribution is my own original work, that there are no prior claims on this work including, but not limited to, any agreements I may have with my employer or other contracts, and that I license this work under an Apache 2.0 license.
+____
+
+什么是一个小的改变? 这个问题问的好, 如果你不确定, 请在邮件列表上提问, 我们会回答你.
+
+See Also
+^^^^^^^^
+
+在2012年11月, 贡献者政策开始实施, 请见: http://www.lift.la/blog/new_contribution_policy[http://www.lift.la/blog/new_contribution_policy].
+
+`contributors.md` 文件可以在以下地址找到: https://github.com/lift/framework/blob/master/contributors.md[https://github.com/lift/framework/blob/master/contributors.md].
+
+The Lift source is on GitHub at https://github.com/lift/[https://github.com/lift/].  The _framework_ project is probably the one you want, although you'll also find Git repositories for examples and Lift web sites there.
+
+GitHub provide an introduction to pull requests at https://help.github.com/articles/using-pull-requests[https://help.github.com/articles/using-pull-requests].
+
+<<modules>> 介绍了如何分享任何大小的代码从Lift modules里.
+
+
+[[wiki]]
+贡献文档
+~~~~~~~
+Problem
+^^^^^^^
+
+你想给Lift贡献文档.
+
+Solution
+^^^^^^^^
+
+更新或者添加Lift文档在: https://www.assembla.com/wiki/show/liftweb[https://www.assembla.com/wiki/show/liftweb].
+
+你将会需要注册, 登陆一个免费的Assembla账户. 然后你需要称为一个 _watcher_ 对Lift Wiki. 你可以通过点击Lift Wiki页面的右上角的按钮称为watcher. 作为一个watcher, 你可以修改页面, 并且建立新的页面.
+
+
+Discussion
+^^^^^^^^^^
+
+如果你不确定你将改变的地方. 你可以在邮件列表里询问.
+
+
+一个对于watcher的限制是, 你不可以移动页面. 如果你建立新的页面在一个错误的地方, 或者你想重新整理页面, 你必须要在邮件列表中寻求一个Lift委员的帮助.
+
+
+See Also
+^^^^^^^^
+
+Lift Wiki的装饰使用的是Textile, 你可以在以下地方学到: http://redcloth.org/hobix.com/textile/[http://redcloth.org/hobix.com/textile/].
+
+
+[[AddRecipe]]
+如何添加一章到本书中
+~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想添加一章到本书中.
+
+Solution
+^^^^^^^^
+
+如果你习惯使用Git, 你可以fork 然后做一个pull request.
+
+或者, 下载一个模版文件, 然后写你的自己章节, 然后发送到Lift邮件列表: https://groups.google.com/group/liftweb[https://groups.google.com/group/liftweb].
+
+你可以在以下地方找到模版: https://raw.github.com/d6y/lift-cookbook/master/template.asciidoc[https://raw.github.com/d6y/lift-cookbook/master/template.asciidoc].
+
+Discussion
+^^^^^^^^^^
+
+任何你感到迷惑, 或者任何让你惊喜的, 让你印象深刻的代码, 例子, 都可以称为一个好的主题在本书里. 如果你想增强, 讨论和验证以存在的章节, 也可以写出来.
+
+这本书使用的修饰语言是Asciidoc. 如果你习惯使用Markdown或者Textile. 你会发现他们是一样的. 对于本书, 你只需要知道如何设置章节, 源码格式和链接. 一个例子在 `template.asciidoc` 文件中有介绍这些内容.
+
+为了做一个改变, 你需要知道, 每个章节都是独立的文件, 并且每个主题都是一个单独的段在文件中.
+
+
+Licensing
++++++++++
+
+我们要求贡献者有以下几点:
+
+* 你同意授权你的工作(包括, 你的文字, 你的代码和任何图片)给我们, 并且同意 Creative Commons Attribution. 非商业化, 非衍生物.
+
+* 你确保你的工作是自己完成的, 并且你有必要的权力对于你的作品.
+
+所以简单来说, 所有的作者自愿的捐出自己的作品.
+
+
+See Also
+^^^^^^^^
+
+这本书的代码在: https://github.com/d6y/lift-cookbook/[https://github.com/d6y/lift-cookbook/].
+
+AsciiDoc的讲解在: http://powerman.name/doc/asciidoc[http://powerman.name/doc/asciidoc] , 它是一个快速的途径了解Asciidoc, 但是如果你需要更多, AsciiDoc页面有介绍: http://www.methods.co.nz/asciidoc/[http://www.methods.co.nz/asciidoc/].
+
+GitHub提供了一个如何制作pull request:https://help.github.com/articles/using-pull-requests[https://help.github.com/articles/using-pull-requests].
+
+<<wiki>> 介绍了如何贡献文档到Lift.
+
+
+[[modules]]
+在Modules里分享代码
+~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有代码, 你想在Lift工程之间分享.
+
+Solution
+^^^^^^^^
+
+建立一个Lift module, 并且引用你以前Lift工程的module.
+
+作为一个例子, 让我们建立一个module来镶嵌Snowstorm的下雪效果在你Lift工程的每个页面中.
+
+Module没有任何特别的: 他们是代码, 包和像其他一样的依赖库. 让他们能互相分享的代码是在 `LiftRules`中. 主要的代码是你有一个 `init` 方法让Lift音乐用可以初始化你的module.
+
+对于我们的下雪效果, 我们将会打包一些JavaScript然后把它插入到所有页面.
+
+我们使用 `lift_blank` 模版开始, 你可以在Lift官网找到它的压缩包, 我们可以删除所有的不是Lift自己需要运行的源代码和HTML文件. 然后, 你会发现一个简单Lift的架构和生成配置.
+
+我们的module需要Snowstorm的JavaScript文件,https://github.com/scottschiller/snowstorm/[https://github.com/scottschiller/snowstorm/] 另存为 `resources/toserve/snowstorm.js`. 这会把JavaScript放到Lift工程的编译目录下.
+
+最后一部分是确保JavaScript包含在每个页面中:
+
+[source,scala]
+--------------------------------------------------------------
+package net.liftmodules.snowstorm
+
+import net.liftweb.http._
+
+object Snowstorm {
+
+ def init() : Unit = {
+
+  ResourceServer.allow {
+     case "snowstorm.js" :: Nil => true
+  }
+
+  def addSnow(s: LiftSession, r: Req) = S.putInHead(
+    <script type="text/javascript" src="/classpath/snowstorm.js"></script> )
+
+  LiftSession.onBeginServicing = addSnow _ ::  LiftSession.onBeginServicing
+
+ }
+
+}
+--------------------------------------------------------------
+
+这里, 我们把代码添加进Lift的处理通道, 并且加入每个页面中.
+
+我们修改 `build.sbt` 来给module一个名字, 组织和版本号.  我们也能移除很多的依赖库和web插件:
+
+[source,scala]
+--------------------------------------------------------------
+name := "snowstorm"
+
+version := "1.0.0"
+
+organization := "net.liftmodules"
+
+scalaVersion := "2.9.1"
+
+resolvers ++= Seq(
+   "snapshots" at "http://oss.sonatype.org/content/repositories/snapshots",
+   "releases" at "http://oss.sonatype.org/content/repositories/releases"
+)
+
+scalacOptions ++= Seq("-deprecation", "-unchecked")
+
+libraryDependencies ++= {
+  val liftVersion = "2.5-RC2"
+  Seq(
+    "net.liftweb" %% "lift-webkit"  % liftVersion  % "compile"
+  )
+}
+--------------------------------------------------------------
+
+我们可以发布这个插件到任何硬盘上的依赖库, 通过使用SBT然后键入:
+
+---------------------------
+publish-local
+---------------------------
+
+在我们的module建立和发布后, 我们现在包含它到我们的Lift应用. 所以这样做, 修改我们的 `build.sbt` 来引用 "snowstorm" 的依赖库:
+
+[source,scala]
+--------------------------------------------------------------
+libraryDependencies ++= {
+  val liftVersion = "2.5-RC2"
+  Seq(
+  ...
+  "net.liftmodules" %% "snowstorm" % "1.0.0",
+  ...
+--------------------------------------------------------------
+
+在我们Lift应用的 `Boot.scala` 中, 我们最后初始化插件:
+
+[source,scala]
+--------------------------------------------------------------
+import net.liftmodules.snowstorm.Snowstorm
+Snowstorm.init()
+--------------------------------------------------------------
+
+当我们运行插件的时候, 每个页面都会有雪花效果.
+
+Discussion
+^^^^^^^^^^
+
+Module是自身包含文件的, 这意味着用户不用复制粘贴JavaScript到自己的HTML模版中.  为了实现它, 我们使用 `ResourceServer`. 当我们引用一个JavaScript文件通过 `/classpath/snowstorm.js`, Lift会尝试定位 `snowstorm.js` 文件. 这就是我们要让Lift做得, 因为 `snowstorm.js` 文件存在于module的JAR文件中.
+
+然而, 我们不想把所有的文件都暴露于用户. 为了避免它, Lift在 `toserve` 文件夹下查找文件, 所以对于我们来说, 我们的文件是在 `src/main/resources/toserve` 下的. 你可以把 `/classpath` 想象成 `toserve` (尽管, 你可以通过改变 `LiftRules.resourceServerPath` 和 `ResourceServer.baseResourceLocation` 改变它).
+
+更深一步想, 如果你想把文件暴露在外边, 你需要使用:
+
+[source,scala]
+--------------------------------------------------------------
+ResourceServer.allow {
+  case "snowstorm.js" :: Nil => true
+}
+--------------------------------------------------------------
+
+我们设置每次都返回 `true` 对于资源的请求, 但是我们可以动态的控制这个设置.
+
+`S.putInHead` 添加JavaScript到页面顶端, 通过使用 `LiftSession.onBeginServicing` (请见 <<OnSession>>), 它每次都被触发. 我们可以使用 `Req` 在这里, 来限制使用这个插件的页面, 但是在这个例子中, 我们把它添加到每个页面.
+
+事实上, 你可以把任何你能看到的东西, 在Lift中变成一个module.  一个经典的方法是, 你有一些功能在Lift的应用中, 然后你把他们独立出来一个module, 然后使用 `Boot` 的 `init` 方法初始化它. 比如说, 如果你想把REST做成一个module, 你就可以使用以上方法, 有一个例子是Lift的 Paypal module, 你可以参考它.
+
+使用你的Module
++++++++++++++
+
+如果你很希望你的module能被很多人使用, 你需要发布它到一个公共的依赖库平台, 比如说Sonatype或者CloudBees. 你也希望确保你的module能保持与Lift的更新.
+
+首先, 你需要包含Lift的 "edition" 作为你module名字的一部分. 比如说版本 1.0.0, 你的module的名字为 "foo". 对于Lift2.5, 你的module应为 "foo_2.5". 这让使用者很清楚的知道你的版本对应的Lift的版本为2.5. 其中, 你可以包含 milestones, snapshots和final releases.
+
+上面的要求也许让你觉得很复杂, 一个很简单的方法是, 你可以制作一个更正在你的build中, 并且允许Lift改变版本号. 这可以让你的module自动生成一个名字. 为了实现它, 你需要建立一个 `project/LiftModule.scala` 在你的module中:
+
+
+[source,scala]
+--------------------------------------------------------------
+import sbt._
+import sbt.Keys._
+
+object LiftModuleBuild extends Build {
+
+  val liftVersion = SettingKey[String]("liftVersion",
+    "Full version number of the Lift Web Framework")
+
+  val liftEdition = SettingKey[String]("liftEdition",
+    "Lift Edition (short version number to append to artifact name)")
+
+  val project = Project("LiftModule", file("."))
+}
+--------------------------------------------------------------
+
+这里定义了一个设置可以用来改变Lift的版本号, 你在你的module `build.sbt` 中这样使用:
+
+[source,scala]
+--------------------------------------------------------------
+name := "snowstorm"
+
+organization := "net.liftmodules"
+
+version := "1.0.0-SNAPSHOT"
+
+liftVersion <<= liftVersion ?? "2.5-SNAPSHOT"
+
+liftEdition <<= liftVersion apply { _.substring(0,3) }
+
+name <<= (name, liftEdition) { (n, e) =>  n + "_" + e }
+
+...
+
+libraryDependencies <++= liftVersion { v =>
+  "net.liftweb" %% "lift-webkit" % v % "provided" ::
+  Nil
+}
+--------------------------------------------------------------
+
+请注意, "provided" 在这里是对Lift的设置. 这意味着, 当你的module使用的是Lift webkit使用的版本的时候, 使用用户当前使用的应用的版本号.
+
+以上的代码给你的是一个方法, 让你创建你的module的版本和Lift的版本一直("2.5"), 而不是特意的锁住你的module为一个更新("2.5-SNAPSHOT"). 通过使用 `liftVersion` 设置, 我们可以控制所有的版本号, 通过使用我们定义的脚本. 这就是我们希望发布的一个对于不同Lift版本, 设置我们module的版本. 下面的连接有更多介绍: https://www.assembla.com/spaces/liftweb/wiki/Releasing_the_modules[https://www.assembla.com/spaces/liftweb/wiki/Releasing_the_modules].
+
+当你的module发布后, 请不要忘记在邮件列表中发表它.
+
+Module纠错
+++++++++++
+
+当你正在制作一个module, 测试和运行它在一个Lift应用上, 如果每次你改变它, 都要重新发布一次, 这将会是非常痛苦的. 幸运的是, SBT允许你的Lift应用决定于module的源代码.  为了实现它, 删除以前发布的module, 并且使用一个本地的依赖库, 你需要建立 `project/LocalModuleDev.scala`:
+
+
+[source,scala]
+------------------------------------
+import sbt._
+object LocalModuleDev extends Build {
+  lazy val root = Project("", file(".")) dependsOn(snow)
+  lazy val snow = ProjectRef(uri("../snowstorm"), "LiftModule")
+}
+------------------------------------
+
+这里, 我们假设我们能找到snowstorm的源代码在Lift的 `../snowstorm` 目录下. 通过使用这个代码, 当你编译你的工程时, SBT将会自动的查找本地的 `snowstorm` module.
+
+
+See Also
+^^^^^^^^
+
+Lift本身包含一系列的module, 但是他们出自不同的工程, 请见: https://github.com/liftmodules/[https://github.com/liftmodules/]. Lift贡献者条约不包含module <<LiftCodeContributions>>. 这意味着: 你可以随意贡献你的module到Lift中.
+
+Lift关于module的Wiki地址: http://liftmodules.net[http://liftmodules.net].
+
+Snowstorm 工程 ("setting CPUs on fire worldwide every winter since 2003") 在: https://github.com/scottschiller/snowstorm/[https://github.com/scottschiller/snowstorm/] 这章的module在: https://github.com/LiftCookbook/snowstorm-example-module[https://github.com/LiftCookbook/snowstorm-example-module].
+
+为了发布在Sonatype, 请见: https://docs.sonatype.org/display/Repository/Sonatype+OSS+Maven+Repository+Usage+Guide[https://docs.sonatype.org/display/Repository/Sonatype+OSS+Maven+Repository+Usage+Guide]. CloudBees提供一个开源的依赖库平台, 你可以通过以下地址学习: http://www.cloudbees.com/foss/foss-dev.cb[http://www.cloudbees.com/foss/foss-dev.cb].
+
+还有其他分享代码在Lift应用之间的方法: "Modularize Lift Applications" at https://groups.google.com/d/msg/liftweb/7GA5t0lefzI/c1wf6W1keDcJ[https://groups.google.com/d/msg/liftweb/7GA5t0lefzI/c1wf6W1keDcJ].
+
+
+

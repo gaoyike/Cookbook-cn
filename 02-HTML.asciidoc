@@ -1,0 +1,1362 @@
+[[HTML]]
+HTML
+----
+
+生成HTML文件, 通常是一个web应用的主要组件.  这章主要介绍Lift的 _View First_ 设计模式 以及如何使用 _CSS Selectors_.后几章主要专注于表格的处理, REST web服务, JavaScript, Ajax 和 Comet.
+
+你可以在这里找到本章的Code: https://github.com/LiftCookbook/cookbook_html[https://github.com/LiftCookbook/cookbook_html].
+
+
+[[TestingAndDebuggingSelectors]]
+测试一个 CSS Selecltor
+~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想互动地, 探索和debug CSS selectors.
+
+Solution
+^^^^^^^^
+
+你可以使用Scala REPL来运行你的 CSS selectors.
+
+这里有一个我们测试 CSS selector 的例子,通过添加一个 _href_ 属性到一个链接中.
+在运行的SBT控制台中输入 `console`命令, 打开REPL:
+
+----
+> console
+[info] Starting scala interpreter...
+[info]
+Welcome to Scala version 2.9.1.final
+Type in expressions to have them evaluated.
+Type :help for more information.
+----
+
+[source,scala]
+----
+scala> import net.liftweb.util.Helpers._
+import net.liftweb.util.Helpers._
+
+scala> val f = "a [href]" #> "http://example.org"
+f: net.liftweb.util.CssSel =
+  (Full(a [href]), Full(ElemSelector(a,Full(AttrSubNode(href)))))
+
+scala> val in = <a>click me</a>
+in: scala.xml.Elem = <a>click me</a>
+
+scala> f(in)
+res0: scala.xml.NodeSeq =
+  NodeSeq(<a href="http://example.org">click me</a>)
+----
+
+`Helpers._` 载入了 CSS Selector 的功能, 我們可以通过创建一个新的selector去测试它, 你可以让它调用一个简单的模版, 然后观察结果.
+
+Discussion
+^^^^^^^^^^
+
+CSS selector transforms 是Lift与其他架构不同的地方之一. 它简单的声明一个html node (左手边的部分) 然后取代它(右手边的方程). 学习它需要很长时间, 所以我们推荐使用REPL这种更直观的方法.
+
+你需要知道 CSS selectors 中的Lift snippet是一个方法: 输入一个 `NodeSeq` 然后, 返回一个 `NodeSeq`, 通过方法 `bind`. Lift将会使用你的HTML模版, 作为输入的 `NodeSeq`, 通过方程的转化, 返回一个新的 `NodeSeq`. 虽然你不会看到bind方程(已经被#>替代), 但是它使用的概念是一样的.
+
+Lift中的CSS selector 功能有一个方法 `CssSel`, 他是一个 `NodeSeq => NodeSeq`. 在上一个例子中, 我们利用它去建立一个输入的
+`NodeSeq` (名为 `in`), 然后建立一个CSS方程 (叫做 `f`).  因为我们知道`CssSel`
+是一个为`NodeSeq => NodeSeq`的方法, 所以最直接使用 selector 的方法是提供一个名为 `in` 的参数, 然后它会返回我们需要的结果, 为 `res0`.
+
+如果你的IDE支持 _worksheet_, Eclipse 和 IntelliJ IDEA 都支持, 你可以在worksheet中查看结果.
+
+See Also
+^^^^^^^^
+
+selector的语法在这里有更好的解释: _Simply Lift_ at http://simply.liftweb.net/[http://simply.liftweb.net/].
+
+
+
+[[SequencingSelectorOps]]
+连续的CSS Selector操作
+~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你希望你的 CSS selector binding 使用在另一个binding 表达式前.
+
+Solution
+^^^^^^^^
+
+使用 `andThen` 而不是 `&` 在你的 selector 表达式上.
+
+比如说, 我们希望替换 `<div id="foo"/>` 成
+`<div id="bar">bar content</div>`, 但是因为一些原因, 我们需要生成 `bar` div 作为一个独立的过程在 selector 表达式中:
+
+----
+sbt> console
+[info] Starting scala interpreter...
+[info]
+Welcome to Scala version 2.9.1.final (Java 1.7.0_05).
+Type in expressions to have them evaluated.
+Type :help for more information.
+----
+
+[source,scala]
+----
+scala> import net.liftweb.util.Helpers._
+import net.liftweb.util.Helpers._
+
+scala> def render = "#foo" #> <div id="bar"/> andThen "#bar *" #> "bar content"
+render: scala.xml.NodeSeq => scala.xml.NodeSeq
+
+scala> render(<div id="foo"/>)
+res0: scala.xml.NodeSeq = NodeSeq(<div id="bar">bar content</div>)
+----
+
+Discussion
+^^^^^^^^^^
+
+当你使用 `&` 时, 想象 CSS selectors 永远是使用你原本的HTML模版, 不管你用的是什么样的表达式.
+这是因为 `&` 把所有的表达式集合起来, 然后一起使用他们; 反之 `andThen` 是把Scala方法放在一起, 然后一个一个的调用, 位于后边的方法会等待前边的方法调用完成后, 才调用.
+
+如果在上面的例子中, 我们替换 `andThen` 成
+`&`:
+
+[source,scala]
+----
+scala> def render = "#foo" #> <div id="bar" /> & "#bar *" #> "bar content"
+render: net.liftweb.util.CssSel
+
+scala> render(<div id="foo"/>)
+res1: scala.xml.NodeSeq = NodeSeq(<div id="bar"></div>)
+----
+
+第二个表达式将不会被匹配, 因为它使用第一个表达式原先的HTML, `<div id="foo"/>`.所以选择器 `#bar` 找不到匹配的对象,
+返回的 `render` 没有任何结果.
+
+See Also
+^^^^^^^^
+
+Lift Wiki 里的 CSS Selectors 也叙述了如何使用 `andThen`: https://www.assembla.com/spaces/liftweb/wiki/Binding_via_CSS_Selectors[https://www.assembla.com/spaces/liftweb/wiki/Binding_via_CSS_Selectors].
+
+
+
+
+[[SetMetaTag]]
+设置Meta Tag
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想在Lift中添加Meta tag在你的HTML文件.
+
+Solution
+^^^^^^^^
+
+使用 `@` CSS binding name selector. 比如:
+
+[source,html]
+----
+<meta name="keywords" content="words, here, please" />
+----
+
+下面的代码会更新HTLM的meta的值:
+
+[source,scala]
+----
+"@keywords [content]" #> "words, we, really, want"
+----
+
+Discussion
+^^^^^^^^^^
+
+`@` selector 选择包含给于名称的所有的元素. 它在这里用来改变 `<meta name="keyword">` tag, 不过你也会看到它被用在其他地方. 比如说,在一个HTML表格中, 你可以选择 `<input name="address">` 通过使用 `"@address"`.
+
+`[content]` 部分是一个关于 _replacement rule_ 的例子, 它是一个在selector后的选择.  在这个例子中, 它用来替换一个名为 "content" 的元素的特定属性的值(这里指得是, keywords).  如果meta tag 没有 "content" 属性, 它将会被添加.
+
+还有另外两个有用的替换法则,用来修改属性:
+
+* `[content!]` -- 删除一个特定属性的值.
+* `[content+]` -- 添加一个值.
+
+以下是使用的例子:
+
+[source,scala]
+----
+scala> import net.liftweb.util.Helpers._
+import net.liftweb.util.Helpers._
+
+scala> val in = <meta name="keywords" content="words, here, please" />
+in: scala.xml.Elem = <meta name="keywords" content="words, here, please"></meta>
+
+scala> val remove = "@keywords [content!]" #> "words, here, please"
+remove: net.liftweb.util.CssSel = CssBind(Full(@keywords [content!]),
+  Full(NameSelector(keywords,Full(AttrRemoveSubNode(content)))))
+
+scala> remove(in)
+res0: scala.xml.NodeSeq = NodeSeq(<meta name="keywords"></meta>)
+----
+
+...和...
+
+[source,scala]
+----
+scala> val add = "@keywords [content+]" #> ", thank you"
+add: net.liftweb.util.CssSel = CssBind(Full(@keywords [content+]),
+  Full(NameSelector(keywords,Full(AttrAppendSubNode(content)))))
+
+scala> add(in)
+res1: scala.xml.NodeSeq = NodeSeq(<meta content="words, here, please, thank you"
+  name="keywords"></meta>)
+----
+
+Appending to a `class` Attribute
+++++++++++++++++++++++++++++++++
+
+尽管没有与 `meta` tags 的直接联系, 你应该知道这是一种, 添加属性和值的更简单的方法. 如果属性是一个 `class`, 一个空格会自动添加到你的classs值之间. 下面是一个示范, 它添加一个 "btn-primary" 属性到一个 `div` node:
+
+[source,scala]
+---------------------------------------------------------------------
+scala> def render = "div [class+]" #> "btn-primary"
+render: net.liftweb.util.CssSel
+
+scala> render(<div class="btn"/>)
+res0: scala.xml.NodeSeq = NodeSeq(<div class="btn btn-primary"></div>)
+---------------------------------------------------------------------
+
+
+See Also
+^^^^^^^^
+
+这里有对selector的语法更好的说明: _Simply Lift_ at http://simply.liftweb.net/[http://simply.liftweb.net/].
+
+在这里 <<TestingAndDebuggingSelectors>>, 你可以找到如何运行selector在REPL下.
+
+
+[[SetPageTitle]]
+设置Title
+~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想在Lift中设置页面的 `<title>`.
+
+Solution
+^^^^^^^^
+
+选择所有包含 `title` 的元素, 然后替换成你想要的文本:
+
+[source,scala]
+----
+"title *" #> "I am different"
+----
+
+假设, 你有一个 `<title>` tag 在你的HTML模版中, 上面的code有如下结果:
+
+[source,html]
+----
+<title>I am different</title>
+----
+
+Discussion
+^^^^^^^^^^
+
+这个例子用了一个element selector, 它会找到HTML模版中的tags, 然后替换成你想要的.
+
+另一个可供选择的是, 你也可以在 `SiteMap` 设置你页面的title,
+这意味着, 你可以给你所有的页面自由分配一个title在sitemap中.
+你需要使用 `Menu.title` 在你的模版目录下:
+
+[source,html]
+----
+<title data-lift="Menu.title"></title>
+----
+
+`Menu.title` 代码添加到所有现存的文本到title中.
+这意味着, 下面的例子会有 "Site Title - " 在title的前边:
+
+[source,html]
+----
+<title data-lift="Menu.title">Site Title - </title>
+----
+
+如果你需要更多的操作, 你可以在你的代码中, 绑定(bind) `<title>` 到一个普通的snippet里. 下面是一个使用的例子:
+
+[source,html]
+----
+<title data-lift="MyTitle"></title>
+-----
+
+[source,scala]
+----
+object MyTitle {
+  def render = <title><lift:Menu.title /> - Site Title</title>
+}
+----
+
+See Also
+^^^^^^^^
+
+在 https://www.assembla.com/spaces/liftweb/wiki/SiteMap[https://www.assembla.com/spaces/liftweb/wiki/SiteMap] 有更多关于Site Map 和 `Menu` 代码的示范.
+
+
+
+[[ConditionalIncludes]]
+HTML的注释
+~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用Internet Explorer HTML conditional comments在你的代码中.
+
+Solution
+^^^^^^^^
+
+把修饰的代码放到一个snippet中, 然后包含snippet在你的页面里.
+
+比如说, 假设我们想使用 HTML5 Shiv (比如. HTML5 Shim) JavaScript, 为了我们可以使用HTML5元素在老版本的IE中.  以下是示例:
+
+[source,scala]
+----
+package code.snippet
+
+import scala.xml.Unparsed
+
+object Html5Shiv {
+  def render = Unparsed("""<!--[if lt IE 9]>
+    <script src="http://html5shim.googlecode.com/svn/trunk/html5.js">
+    </script><![endif]-->""")
+}
+----
+
+然后我们引用这段代码在 `<head>` 标签中, 也可以放进模版 `templates-hidden/default.html`中:
+
+[source,html]
+----
+<script data-lift="Html5Shiv"></script>
+----
+
+Discussion
+^^^^^^^^^^
+
+Lift中的HTML5解析不包含已经生成了的页面的comments. 如果你只是想粘贴 _html5shim_ 修饰到你的模版中, 你会发现, 你的页面会找不到它.
+
+我们通过解析未修饰的模版去解决这个问题. 如果你看到 `未解析` 然后松了一口气, 你的直觉是对的.
+一般情况下, Lift会使用已经解析好的了模版然后套用代码, 但是在这里例子中, 我们希望的是一段未解析的 XML 内容(the comment tag) 并且输出它.
+
+如果你发现, 你经常使用 IE conditional comments, 你需要建立一个更普遍的snippet.
+比如说:
+
+[source,scala]
+----
+package code.snippet
+
+import xml.{NodeSeq, Unparsed}
+import net.liftweb.http.S
+
+object IEOnly {
+
+  private def condition : String =
+    S.attr("cond") openOr "IE"
+
+  def render(ns: NodeSeq) : NodeSeq =
+    Unparsed("<!--[if " + condition + "]>") ++ ns ++ Unparsed("<![endif]-->")
+}
+----
+
+它将使用在如下...
+
+[source,html]
+----
+<div data-lift="IEOnly">
+  A div just for IE
+</div>
+----
+
+...然后生成以下输入:
+
+[source,html]
+----
+<!--[if IE]><div>
+  A div just for IE
+</div><![endif]-->
+----
+
+请注意 `condition` 测试默认是对"IE", 但是首先, 请看属性 "cond". 它允许你写入:
+
+[source,html]
+----
+<div data-lift="IEOnly?cond=lt+IE+9">
+  You're using IE 8 or earlier
+</div>
+----
+
+`+` 符号用来进行 URL 编码, 作为一个空格, 结果:
+
+[source,html]
+----
+<!--[if lt IE 9]><div>
+  You're using IE 8 or earlier
+</div><![endif]-->
+----
+
+
+See Also
+^^^^^^^^
+
+`IEOnly` 的例子是 Antonio Salazar Cardozo 在有Mail List上提出的: https://groups.google.com/d/msg/liftweb/kLzcJwfIqHQ/K91MdtoNz0MJ[https://groups.google.com/d/msg/liftweb/kLzcJwfIqHQ/K91MdtoNz0MJ].
+
+Html5Shim可以在找到: http://code.google.com/p/html5shim/[http://code.google.com/p/html5shim/].
+
+
+
+[[PassThru]]
+返回一个没有改变的makeup
+~~~~~~~~~~~~~~~~~~~~~~
+Problem
+^^^^^^^
+
+你想一个snippet返回它修饰前的代码.
+
+Solution
+^^^^^^^^
+
+使用 `PassThru` .
+
+比如说, 假设, 在某下条件达成下, 你有一个执行一些转化的snippet, 但是在没达成下, 你希望返回原先的html markup.
+
+从原先的markup开始...
+
+[source,html]
+----
+<h2>Pass Thru Example</h2>
+
+<p>There's a 50:50 chance of seeing "Try again" or "Congratulations!":</p>
+
+<div data-lift="PassThruSnippet">
+  Try again - this is the template content.
+</div>
+----
+
+...我们可以通过以下snippet, 保留它, 或者修改它:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.util.PassThru
+
+import scala.util.Random
+import xml.Text
+
+class PassThruSnippet {
+
+  private def fiftyFifty = Random.nextBoolean
+
+  def render =
+    if (fiftyFifty) "*" #> Text("Congratulations! The content was changed")
+    else PassThru
+
+}
+----
+
+Discussion
+^^^^^^^^^^
+
+`PassThru` 是一个 _identity function_, 它的类型为 `NodeSeq => NodeSeq`. 它返回它输入的NodeSeq:
+
+[source, scala]
+-----
+object PassThru extends Function1[NodeSeq, NodeSeq] {
+  def apply(in: NodeSeq): NodeSeq = in
+}
+-----
+
+一个相关的例子未 `ClearNodes` :
+
+[source, scala]
+-----
+object ClearNodes extends Function1[NodeSeq, NodeSeq] {
+  def apply(in: NodeSeq): NodeSeq = NodeSeq.Empty
+}
+-----
+
+转化一个 `NodeSeq` 到另一个 `NodeSeq` 是非常简单的, 但是它能强大到让你肆意的更改, 重写`NodeSeq`.
+
+
+
+
+
+
+
+[[SnippetNotFound]]
+使用HTML5, 出现没找到Snippet
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你使用Lift 和 HTML5解析, 你的snippet之一发生了 "Class Not Found" 错误. 它发生在 `<lift:HelloWorld.howdy />`.
+
+Solution
+^^^^^^^^
+
+请使用新的 designer-friendly 机制.  例如:,
+
+[source,html]
+----
+<div data-lift="HellowWorld.howdy">...</div>
+----
+
+Discussion
+^^^^^^^^^^
+
+HTML5解析和原始的Lift XHTML解析有很多不同. 事实上, HTML5解析转化所有的元素和属性到小写字母. 这意味着, Lift看到 `<lift:HelloWorld.howdy />` 然后查找 "helloworld" 而不是 "HelloWorld", 这会造成一个 "Class Not Found Error".
+
+通过使用 designer-friendly 机制, 这个问题可以解决, 并且你还免费的得到了验证HTML文件的功能.
+
+在这里, 我们使用HTML5 解析, 它被设置在 `Boot.scala`:
+
+[source,scala]
+-----
+// Use HTML5 for rendering
+LiftRules.htmlProperties.default.set( (r: Req) =>
+  new Html5Properties(r.userAgent) )
+----
+
+
+See Also
+^^^^^^^^
+
+在 XHTML 和 HTML5 解析中最大的不同, 请看: https://groups.google.com/d/msg/liftweb/H-xe1uRLW1c/B60UH8P54VAJ[https://groups.google.com/d/msg/liftweb/H-xe1uRLW1c/B60UH8P54VAJ].
+
+
+
+[[AvoidAssetCaching]]
+避免 CSS 和 JavaScript缓存
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你正在修改你應用的 CSS 或者 JavaScript, 但是浏览器缓存了你应用以前的版本. 你想停止缓存.
+
+Solution
+^^^^^^^^
+
+添加 `with-resource-id` data-lift 属性到你的脚本中,或者链接中:
+
+[source,html]
+----
+<script data-lift="with-resource-id" src="/myscript.js"
+ type="text/javascript"></script>
+----
+
+通过使用这个属性, Lift将会添加 "resource id" 到你的 `src` (或者 `href`), 每次Lift重新启动, 它将生成一个单独的id, 这确保了浏览器不缓存它.
+
+生成的HTML, 如下:
+
+[source,html]
+----
+<script src="/myscript.js?F619732897824GUCAAN=_"
+  type="text/javascript" ></script>
+----
+
+Discussion
+^^^^^^^^^^
+
+当你的Lift重启的时候, 一个随机的值会添加到你的资源后. 这意味着每次你更新时, 你将会确保看到新的内容.
+
+如果你需要使用 `with-resource-id` 在别的地方, 你可以配置一个 `String => String` 到
+`LiftRules.attachResourceId`. 默认的实现,就像上边的 "/myscript.js" 一样, 然后它会返回你资源的名字, 并且附加一个id.
+
+你也可以包含很多的tags, 通过使用`<lift:with-resource-id>...<lift:with-resource-id>` 语句. 然而, 不要在 `<head>` 里做这些, 因为HTML5解析会把head以外的tag删除.
+
+请注意, 一些代理默认情况下, 不会给有id的文件, 做任何缓存. 如果这个影响到你, 你可以写一段代码, 将自动生成的id移出文件名, 放到文件路径下.
+
+这里有一个例子教你如何实现. 与其生成一个有id后缀的文件 `/assets/style.css?F61973`, 我们将生成 `/cache/F61973/assets/style.css`. 我们将告诉Lift, 使用新的格式, 并且找到正确的文件. 以下是代码:
+
+[source, scala]
+-----------
+package code.lib
+
+import net.liftweb.util._
+import net.liftweb.http._
+
+object CustomResourceId {
+
+ def init() : Unit = {
+  // The random number we're using to avoid caching
+  val resourceId = Helpers.nextFuncName
+
+  // Prefix with-resource-id links with "/cache/{resouceId}"
+  LiftRules.attachResourceId = (path: String) => {
+   "/cache/" + resourceId + path
+  }
+
+  // Remove the cache/{resourceId} from the request if there is one
+  LiftRules.statelessRewrite.prepend( NamedPF("BrowserCacheAssist") {
+   case RewriteRequest(ParsePath("cache" :: id :: file, suffix, _, _), _, _) =>
+    RewriteResponse(file, suffix)
+  })
+
+ }
+}
+-----------
+
+这些代码是在 `Boot.scala` 中的...
+
+[source, scala]
+-----------
+CustomResourceId.init()
+-----------
+
+通过使用上面的代码, 我们能, 比如说, 修改 `templates-hidden/default.html` 并且添加一个源码id到Jquery, 如下:
+
+[source, html]
+-----------
+<script id="jquery" data-lift="with-resource-id"
+  src="/classpath/jquery.js" type="text/javascript"></script>
+-----------
+
+上面的代码会生成以下HTML:
+
+[source, html]
+-----------
+<script type="text/javascript" id="jquery"
+  src="/cache/F352555437877UHCNRW/classpath/jquery.js"></script>
+-----------
+
+大多数操作都在 `statelessRewrite` 中, 它在Lift的底层处理. 它包含两个部分:
+
+* 一个 `RewriteRequest` 我们用来做匹配; 和
+* 一个 `RewriteResponse` 我们希望匹配的结果.
+
+首先请看 `RewriteRequest` , 它需要三个参数: 路径, 方法 (比如说, `GetRequest`, `PutRequest`, 等等) 和 `HTTPRequest` 它自己.  在路径中, 我们希望找到匹配开始为 "cache"的语句, 并且后边跟着一些东西(是什么,我们并不在意), 然后其他的不分, 代表了名字 `file`. 在这个情况下, 我们重写原先的路径, 就是 `file` 和 `suffix`, 然后删除`/cache/F352555437877UHCNRW` 部分.  这就是Lift如何做的.
+
+
+See Also
+^^^^^^^^
+
+源码关于 `LiftRules` 展示了`attachResourceId`的默认的实现 : https://github.com/lift/framework/blob/master/web/webkit/src/main/scala/net/liftweb/http/LiftRules.scala[https://github.com/lift/framework/blob/master/web/webkit/src/main/scala/net/liftweb/http/LiftRules.scala].
+
+Google的 _Optimize caching_ 是一个很好的学习浏览器行为的资源: https://developers.google.com/speed/docs/best-practices/caching[https://developers.google.com/speed/docs/best-practices/caching].
+
+你可以学到更多关于 URL 重写在Lift wiki: https://www.assembla.com/spaces/liftweb/wiki/URL_Rewriting[https://www.assembla.com/spaces/liftweb/wiki/URL_Rewriting].
+
+
+
+
+[[AddToHead]]
+添加语句到Head中
+~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你的代码使用了一个模版, 不过你想在其中特定的页面添加 `<head>`.
+
+Solution
+^^^^^^^^
+
+使用 `head` snippet 或者 CSS class 才能让Lift整合你页面的 `<head>`.比如说, 假设你有以下HTML在 `templates-hidden/default.html`:
+
+[source,html]
+----
+<html lang="en" xmlns:lift="http://liftweb.net/">
+  <head>
+    <meta charset="utf-8"></meta>
+    <title data-lift="Menu.title">App: </title>
+    <script id="jquery" src="/classpath/jquery.js"
+      type="text/javascript"></script>
+    <script id="json" src="/classpath/json.js"
+      type="text/javascript"></script>
+ </head>
+ <body>
+     <div id="content">The main content will get bound here</div>
+ </body>
+</html>
+----
+
+假设你有 `index.html`, 而且你想添加 `red-titles.css` 去只改变这个页面的CSS.
+
+你需要做的是把CSS文件加入head(data-lift)到 `head`:
+
+[source,html]
+-----
+<!DOCTYPE html>
+<html>
+ <head>
+   <title>Special</title>
+ </head>
+ <body data-lift-content-id="main">
+  <div id="main" data-lift="surround?with=default;at=content">
+    <link data-lift="head" rel="stylesheet"
+       href="red-titles.css" type="text/css" />
+    <h2>Hello</h2>
+  </div>
+ </body>
+</html>
+-----
+
+请注意, `index.html` 页面是一个有效的HTML5页面, 会生成有效的 `<head>` tag, 就像如下:
+
+[source,html]
+----
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <meta charset="utf-8">
+  <title>App:  Home</title>
+  <script type="text/javascript"
+    src="/classpath/jquery.js" id="jquery"></script>
+  <script type="text/javascript"
+    src="/classpath/json.js" id="json"></script>
+  <link rel="stylesheet" href="red-titles.css" type="text/css">
+ </head>
+ <body>
+   <div id="main">
+     <h2>Hello</h2>
+   </div>
+  <script type="text/javascript" src="/ajax_request/liftAjax.js"></script>
+  <script type="text/javascript">
+  // <![CDATA[
+  var lift_page = "F557573613430HI02U4";
+  // ]]>
+  </script>
+ </body>
+</html>
+----
+
+Discussion
+^^^^^^^^^^
+
+如果你发现你的tag没有在 `<head>` 中, 请检查你是否在使用一个有效的HTML5.
+
+你也可以使用 `<lift:head>...</lift:head>` 去包含很多的表达式, 然后使用`<head_merge>...</head_merge>` 在code中, 替代 `<lift:head>`.
+
+另一个可选的方法是 `class="lift:head"`, 可以替代 `data-lift="head"`.
+
+`head` snippet 是一个内建的 snippet, 其他和你写的snippet没有任何区别.  它是用来发布, 包含你需要的信息的`<head>` . 它可以是 `<title>`, `<link>`, `<meta>`, `<style>`, `<script>` 或者 `<base>` tags.  它是如何将 `<head>` 放入 `head` snippet 中加工, 并且最后插入到页面的`<head>` 中的? 当Lift处理你的HTML模版时, 它自动地整合所有的 `<head>` tags 到页面 `<head>` 中.
+
+你也许会怀疑, 你是否可以用一个纯文本的 `<head>` 在你的模版中, 但是那将不是一个有效的HTML5文件.
+
+还有一个 `tail` 命令, 也可以做相同的事情, 它把所有你想的东西, 放到body的闭合tag之前.
+
+See Also
+^^^^^^^^
+
+<<JavaScriptTail>> 讲述了, 如何把JavaScript放到页面的最后.
+
+以下是一个验证器, 用来测试是不是有效的HTML5, 这会对于你的纠错有很大帮助. http://validator.w3.org/[http://validator.w3.org/].
+
+
+
+
+[[Custom404]]
+自定义404页面
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用一个自定义的 "404" (not found) 页面.
+
+Solution
+^^^^^^^^
+
+在 `Boot.scala` 添加以下:
+
+[source,scala]
+----
+import net.liftweb.util._
+import net.liftweb.http._
+
+LiftRules.uriNotFound.prepend(NamedPF("404handler"){
+  case (req,failure) =>
+    NotFoundAsTemplate(ParsePath(List("404"),"html",true,false))
+})
+----
+
+文件 `src/main/webapp/404.html` 将被用来显示, 当没有找到可用的页面时.
+
+Discussion
+^^^^^^^^^^
+
+`uriNotFound` 这条Lift法则,需要返回 `NotFound` 为了回复`Req` 和 `Box[Failure]`. 它
+允许你自定义response,基于特定的类型错误或者请求.
+
+一共有三种 `NotFound`:
+
+* `NotFoundAsTemplate` --  用来处理关于`ParsePath`的Lift处理HTML模版的事情.
+* `NotFoundAsResponse` -- 允许你返回一个特定的 `LiftResponse`.
+* `NotFoundAsNode` -- 包裹一个 `NodeSeq` 并返回 404 response.
+
+在这里例子中, 我们匹配任何 not found 的请求, 不管是请求失败, 或者页面没找到, Lift会计算 `ParsePath`, 并使用路径 `/404.html`.
+
+如果你对, 最后的参数 `true` and `false`还有`ParsePath` 感到奇怪.
+他们告诉Lift, 我们输入的路径是绝对路径, 并且在结尾没有 / .  `ParsePath` 是一个URI 路径, 不过在这里例子中, 他们之间没有关系.
+
+请注意, 在如果使用这种方法创建的404页面, 是不会出现在site map里的. 因为我们没有添加 `404.html` 文件到site map, 而且我们不需要添加因为我们创建页面是通过`NotFoundAsTemplate` 而不是直接发送一个请求到 _/404.html_. 然而, 这意味着, 如果你显示一个错误页面使用HTML模版, 并且包含`Menu.builder` 或者类似的, (比如 `templates-hidden/default.html`), 你将会看到 "No Navigation Defined". 为了解决这个问题, 你也许需要一个不同的模版在404页面上.
+
+另一个选择是, 你可以在你的sitemap里设置404页面, 当时把他设置成hideen, 这样在 `Menu.builder` 就看不到:
+
+[source,scala]
+----
+Menu.i("404") / "404" >> Hidden
+----
+
+
+See Also
+^^^^^^^^
+
+<<CatchException>> 这里有关于如何catch所有的异常的讲解.
+
+
+
+
+
+[[CustomStatusPage]]
+另一些可以自定义的状态页面
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想自定义一个关于一个确定的HTTP状态code的页面.
+
+Solution
+^^^^^^^^
+
+使用 `LiftRules.responseTransformers` 去匹配response.
+
+比如说, 假设,我们想设置一个自定义页面对于403
+("Forbidden") 状态在Lift应用中. 然后假设这个页面包含snippet, 所以他必须通过Lift进行修饰.
+
+为了实现它, 在`Boot.scala` 中, 我们定义 `LiftResponse` 我们想生成, 然后使用一个response, 当403状态将要被Lift处理:
+
+[source,scala]
+----
+def my403 : Box[LiftResponse] =
+  for {
+    session <- S.session
+    req <- S.request
+    template = Templates("403" :: Nil)
+    response <- session.processTemplate(template, req, req.path, 403)
+  } yield response
+
+LiftRules.responseTransformers.append {
+  case resp if resp.toResponse.code == 403 => my403 openOr resp
+  case resp => resp
+}
+----
+
+当出现403的时候, 文件 _src/main/webapp/403.html_ 将被用来显示. 其他非403的回应将无视.
+
+Discussion
+^^^^^^^^^^
+
+`LiftRules.responseTransformers` 允许你使用
+`LiftResponse => LiftResponse` 方法去改变在HTTP处理末期的回复. 这里一个很普遍的机制: 在这个例子中, 我们只匹配一个HTTP的状态code, 但是我们能匹配任意 `LiftResponse`.
+
+
+这章里, 我们制造了一个HTML模版,去返回response响应, 但是你也许遇到别的情况, 这时其他的response会更有用, 比如说 `InMemoryResponse`.
+
+你可以把以上的例子简化为:
+
+[source,scala]
+----
+LiftRules.responseTransformers.append {
+  case resp if resp.toResponse.code == 403 => RedirectResponse("/403.html")
+  case resp => resp
+}
+----
+
+这个例子也同样能工作, 只有一个缺点是, 当HTTP状态code发送回浏览器时, 它不是一个403code.
+
+这里还有一个更普遍的用法, 如果你自定义很多个页面, 你需要定义你想要自定义的HTTP状态code, 
+建立页面对每一个code, 然后设置匹配:
+
+[source,scala]
+----
+LiftRules.responseTransformers.append {
+  case Customised(resp) => resp
+  case resp => resp
+}
+
+object Customised {
+
+  // 这些页面将会匹配: 403.html and 500.html
+  val definedPages = 403 :: 500 :: Nil
+
+  def unapply(resp: LiftResponse) : Option[LiftResponse] =
+    definedPages.find(_ == resp.toResponse.code).flatMap(toResponse)
+
+  def toResponse(status: Int) : Box[LiftResponse] =
+    for {
+      session <- S.session
+      req <- S.request
+      template = Templates(status.toString :: Nil)
+      response <- session.processTemplate(template, req, req.path, status)
+  } yield response
+
+}
+----
+
+我们一般喜欢用 `Customised` 是当我们有一个HTML文件在 `src/main/webapp`,当他匹配code的时候, 使用它.不过你也可以使用不同的 `Templates`.
+
+如果你想测试以上的代码, 你需要添加以下代码到, `Boot.scala`, 它会把所有的请求发到 _/secret_ 并且返回 403:
+
+[source,scala]
+----
+val Protected = If(() => false, () => ForbiddenResponse("No!"))
+
+val entries = List(
+  Menu.i("Home") / "index",
+  Menu.i("secret") / "secret" >> Protected,
+  // rest of your site map here...
+)
+----
+
+如果你请求 _/secret_, 一个403回复会被触发, 它将会返回 _403.html_  模版.
+
+[NOTE]
+在Lift3 中 `responseTransformers` 将被改变为一个偏函数, 这意味着你需要把这个例子改成 `case r => r`.
+
+
+See Also
+^^^^^^^^
+
+<<Custom404>> 解释了内建的对404页面的支持.
+
+<<CatchException>> 介绍了如何catch你code中的所有异常.
+
+
+
+[[LinksInNotice]]
+Notice中的超级链接
+~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想添加一个能点击的`S.error`, `S.notice` 或者
+`S.warning` 信息.
+
+Solution
+^^^^^^^^
+
+添加一个 `NodeSeq` 有超级链接的提示:
+
+[source,scala]
+----
+S.error("checkPrivacyPolicy",
+  <span>See our <a href="/policy">privacy policy</a></span>)
+----
+
+你可以把它和以下code同时使用...
+
+[source,html]
+---------------------------------------------------------
+<div data-lift="Msg?id=checkPrivacyPolicy"></div>
+---------------------------------------------------------
+
+
+Discussion
+^^^^^^^^^^
+
+你也许对`S.error(String)`的Lift提示比用 `NodeSeq` 作为参数的函数签名更熟悉, 但是 `String` 版本, 只是将 `String` 转变为 `scala.xml.Text` 类型的 `NodeSeq`.
+
+
+
+See Also
+^^^^^^^^
+
+Lift的消息机制在Wiki有说明: http://www.assembla.com/spaces/liftweb/wiki/Lift_Notices_and_Auto_Fadeout[http://www.assembla.com/spaces/liftweb/wiki/Lift_Notices_and_Auto_Fadeout].
+
+
+
+
+[[DownloadLink]]
+下载的超级链接
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想点击一个按钮, 或者一个链接, 然后会触发下载, 而不是打开一个页面.
+
+Solution
+^^^^^^^^
+
+使用 `SHtml.link` 建立一个链接, 建立一个函数, 返回`LiftResponse`, 然后用 `ResponseShortcutException` 包装它.
+
+比如说, 我们建立一个snippet, 它可以让用户阅览一段诗, 并且下载它. HTML模版中, 我们使用 `<br>` 将每段诗分开:
+
+[source, html]
+-------------------------------------------------------------
+<h1>A poem</h1>
+
+<div data-lift="DownloadLink">
+  <blockquote>
+    <span class="poem">
+        <span class="line">line goes here</span> <br />
+    </span>
+  </blockquote>
+  <a href="">download link here</a>
+</div>
+-------------------------------------------------------------
+
+这段Snippet会修饰每段诗, 并且替换下载链接, 它将会回复一个下载请求,并且下载诗:
+
+[source, scala]
+-------------------------------------------------------------
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http._
+import xml.Text
+
+class DownloadLink {
+
+  val poem =
+    "Roses are red," ::
+    "Violets are blue," ::
+    "Lift rocks!" ::
+    "And so do you." :: Nil
+
+  def render =
+    ".poem" #> poem.map(line => ".line" #> line) &
+    "a" #> downloadLink
+
+  def downloadLink =
+    SHtml.link("/notused",
+      () => throw new ResponseShortcutException(poemTextFile),
+      Text("Download") )
+
+  def poemTextFile : LiftResponse =
+    InMemoryResponse(
+      poem.mkString("\n").getBytes("UTF-8"),
+      "Content-Type" -> "text/plain; charset=utf8" ::
+      "Content-Disposition" -> "attachment; filename=\"poem.txt\"" :: Nil,
+      cookies=Nil, 200)
+}
+-------------------------------------------------------------
+
+请注意, `SHtml.link` 生成一个超级链接, 并且运行一个你提供的方法.
+
+这里的窍门是, 当一个`LiftResponse` 在 `ResponseShortcutException` 中, 将会暗示Lift, 这个response已经完成, 所以页面将会被记录 (`而不是使用`), 但是不被处理. 对于浏览器来说: 它收到了一个请求的完整回复, 并且将会修饰页面, 在这里, 我们不让它修饰页面, 而是转到下载.
+
+Discussion
+^^^^^^^^^^
+
+`SHtml.link` 的工作原理是, 生成一个URL, 它可以包含一个方法. 在一个叫做 `downloadlink`的页面, 这个下载链接像如下这样:
+
+---------------------------------------------
+downloadlink?F845451240716XSXE3G=_#notused
+---------------------------------------------
+
+当这样一个链接被使用时, Lift会查看方法, 并且调用它在跳转链接之前. 然而, 在这里, 我们使用了一种快捷的Lift通道, 通过throw一个异常,并且catch它.  异常会被Lift catch, 并且会封装一个response给浏览器.
+
+这种快捷方式是通过使用: `S.redirectTo` 通过 `ResponseShortcutException.redirect`. 这个对象被定义为 `shortcutResponse`, 你可以使用如下的方法使用它:
+
+[source, scala]
+----------------------------------------------------
+import net.liftweb.http.ResponseShortcutException._
+
+def downloadLink =
+  SHtml.link("/notused",
+    () => {
+      S.notice("The file was downloaded")
+      throw shortcutResponse(poemTextFile)
+    },
+    Text("Download") )
+----------------------------------------------------
+
+当下一次页面重载的时候, 我们通过使用 `S.notice` 去高亮 `throw shortcutResponse` , 反之,则抛出 `throw new ResponseShortcutException`. 在这里, 当用户下载的时候, 这个提示并不会显示, 它会在下一次提示的时候, 才显示, 比如用户跳转到其他页面.  在很多情况下, 这没有本质区别.
+
+这章使用了Lift的stateful属性. 你可以看出来: 从查看, 跳转到诗, 到下载文件 , state的使用是多么的重要.  如果你做一个数据库的报告, 你可以直接提供一个下载文件, 从数据库中重新生成一个文件.
+
+然而, 在另一个情况下, 你也许想避免让一个链接直接连到一个文件. 这个情况下, 你需要使用REST 服务然后返回一个 `LiftResponse`.
+
+See Also
+^^^^^^^^
+
+<<REST>> 请看基于REST的Lift服务.
+
+<<RestStreamContent>> 中讨论了 `InMemoryResponse`和类似的response
+
+对于做报告, the Apache POI project, http://poi.apache.org/[http://poi.apache.org/], 包含了自动生成Excel文件的库;以下是OpenCSV, http://opencsv.sourceforge.net[http://opencsv.sourceforge.net], 是一个可以自动生成 CSV 文件的库.
+
+
+
+
+[[TestingReq]]
+测试一个 Req
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想测试一个包含`Req`的方法.
+
+Solution
+^^^^^^^^
+
+提供一个request的模型`MockWeb.testReq`, 然后用你的test作为 `testReq` 的内容.
+
+首先, 需要添加Lift的 Test Kit作为一个依赖库到`build.sbt`:
+
+[source, scala]
+-------
+libraryDependencies += "net.liftweb" %% "lift-testkit" % "2.5-RC2" % "test"
+-------
+
+为了展示如何使用 `testReq` 我们测试一个可以察觉Google crawler 的方法. Google设置crawlers 通过变量 "User-Agent" 在一个request的头里, 所以我们想测试的方法为:
+
+[source, scala]
+-------
+package code.lib
+
+import net.liftweb.http.Req
+
+object RobotDetector {
+
+  val botNames =
+    "Googlebot" ::
+    "Mediapartners-Google" ::
+    "AdsBot-Google" :: Nil
+
+  def known_?(ua: String) =
+    botNames.exists(ua contains _)
+
+  def googlebot_?(r: Req) : Boolean =
+    r.header("User-Agent").exists(known_?)
+}
+-------
+
+我们有一个List的 `botNames`, 他们是用来让Google发送作为user agent的, 然后我们定义一个检查函数, `known_?`, 它用 user agent string 作为参数, 然后去查找是否有bot包含这个 user agent string.
+
+`googlebot_?` 方法以 `Req` 对象作为参数, 然后通过它查找header. 它的结果是存在一个 `Box[String]` 因为有可能没找到任何header. 我们可以通过查看 `Box` 中是否有header, 并且它
+ 的值符合 `known_?` 的条件, 来得到结果.
+
+为了测试它, 我们建立一个user agent string, 准备一个 `MockHttpServletRequest` 和它的header, 然后使用Lift的 `MockWeb` 把一个底层的request变为Lift的`Req` 供我们测试:
+
+[source, scala]
+-------
+package code.lib
+
+import org.specs2.mutable._
+import net.liftweb.mocks.MockHttpServletRequest
+import net.liftweb.mockweb.MockWeb
+
+class SingleRobotDetectorSpec extends Specification {
+
+  "Google Bot Detector" should {
+
+    "spot a web crawler" in {
+
+      val userAgent = "Mozilla/5.0 (compatible; Googlebot/2.1)"
+
+      // Mock a request with the right header:
+      val http = new MockHttpServletRequest()
+      http.headers = Map("User-Agent" -> List(userAgent))
+
+      // Test with a Lift Req:
+      MockWeb.testReq(http) { r =>
+        RobotDetector.googlebot_?(r) must beTrue
+      }
+    }
+
+  }
+
+}
+-------
+
+运行SBT,并且使用 "test" 命令会产生:
+
+-------
+[info] SingleRobotDetectorSpec
+[info]
+[info] Google Bot Detector should
+[info] + spot a web crawler
+[info]
+[info] Total for specification SingleRobotDetectorSpec
+[info] Finished in 18 ms
+[info] 1 example, 0 failure, 0 error
+-------
+
+Discussion
+^^^^^^^^^^
+
+尽管 `MockWeb.testReq` 负责处理 `Req`, 但是环境上的 `Req` 是由 `MockHttpServletRequest`提供的. 如果你想设置一个request, 建立一个mock的实例, 在使用它和 `testReq` 之前, 配置你想要的state.
+
+另外关于 HTTP headers, 你可以设置cookies, content type, query parameters, the HTTP method, authentication type, 和 body. 他们有多样的配置在 `body` 上, 这使得你可以轻易的依据你设置的值改变content类型:
+
+* `JValue` 的 content type 为 "application/json".
+* `NodeSeq` 则为 "text/xml" (或者你可以提供其他类型).
+* `String` 则为 "text/plain" (或者你可以提供其他类型.
+* `Array[Byte]` 没有content type.
+
+Data Table
+++++++++++
+在上一个例子中, 重复的设置相同的user agents会让人十分讨厌.  Specs2's _Data Table_ 提供了一个方法, 可以让你运行不同的值在相同的test中:
+
+[source, scala]
+-------
+package code.lib
+
+import org.specs2._
+import matcher._
+import net.liftweb.mocks.MockHttpServletRequest
+import net.liftweb.mockweb.MockWeb
+
+class RobotDetectorSpec extends Specification with DataTables {
+
+  def is = "Can detect Google robots" ^ {
+    "Bot?" || "User Agent" |
+    true   !! "Mozilla/5.0 (Googlebot/2.1)" |
+    true   !! "Googlebot-Video/1.0" |
+    true   !! "Mediapartners-Google" |
+    true   !! "AdsBot-Google" |
+    false  !! "Mozilla/5.0 (KHTML, like Gecko)" |> {
+    (expectedResult, userAgent) => {
+      val http = new MockHttpServletRequest()
+      http.headers = Map("User-Agent" -> List(userAgent))
+      MockWeb.testReq(http) { r =>
+        RobotDetector.googlebot_?(r) must_== expectedResult
+      }
+     }
+    }
+
+  }
+
+}
+-------
+
+Test的核心内容没有改变: 我们建立了一个模型, 设置了user agent, 检查 `googlebot_?`的结果. 不同的是 Specs2 提供了一个更好的方法, 列出了不同变量的情况, 并且pipe他们到方法中.
+
+在SBT上运行以上code的结果是:
+
+-------
+[info] Can detect Google robots
+[info] + Bot?  | User Agent
+[info]   true  | Mozilla/5.0 (Googlebot/2.1)
+[info]   true  | Googlebot-Video/1.0
+[info]   true  | Mediapartners-Google
+[info]   true  | AdsBot-Google
+[info]   false | Mozilla/5.0 (KHTML, like Gecko)
+[info]
+[info] Total for specification RobotDetectorSpec
+[info] Finished in 1 ms
+[info] 1 example, 0 failure, 0 error
+-------
+
+尽管期待的值首先显示在我们的table上, 但是这里没有任何要求让它显示在第一位.
+
+
+See Also
+^^^^^^^^
+
+Lift wiki里有关于这个的更多讨论, 包括使用Selenium. https://www.assembla.com/spaces/liftweb/wiki/Testing_Lift_Applications[https://www.assembla.com/spaces/liftweb/wiki/Testing_Lift_Applications].
+
+
+
+[[Textile]]
+使用Textile
+~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用 Textile markup在你的Lift web应用中.
+
+Solution
+^^^^^^^^
+
+安装 Lift Textile module 在你的 `build.sbt` 文件, 你需要安装以下依赖库:
+
+[source,scala]
+----
+"net.liftmodules" %% "textile_2.5" % "1.3"
+----
+
+你可以是用这个模块去, 修饰 Textile到HTML, 通过使用 `toHtml` 方法.
+
+比如说, 在添加模块后, 运行 SBT, SBT _console_ 命令允许你直接使用这个模块:
+
+[source,scala]
+---------------------------------------------------------
+scala> import net.liftmodules.textile._
+import net.liftmodules.textile._
+
+scala> TextileParser.toHtml("""
+ | h1. Hi!
+ |
+ | The module in "Lift":http://www.liftweb.net for turning Textile markup
+ | into HTML is pretty easy to use.
+ |
+ | * As you can see.
+ | * In this example.
+ | """)
+res0: scala.xml.NodeSeq =
+NodeSeq(, <h1>Hi!</h1>,
+, <p>The module in <a href="http://www.liftweb.net">Lift</a> for turning Textile
+  markup<br></br>into HTML is pretty easy to use.</p>,
+, <ul><li> As you can see.</li>
+<li> In this example.</li>
+</ul>,
+, )
+
+---------------------------------------------------------
+
+如果我们使用PrettyPrinter, 结果会更容易懂:
+
+[source,scala]
+---------------------------------------------------------
+scala> val pp = new PrettyPrinter(width=35, step=2)
+pp: scala.xml.PrettyPrinter = scala.xml.PrettyPrinter@54c19de8
+
+scala> pp.formatNodes(res0)
+res1: String =
+<h1>Hi!</h1><p>
+  The module in
+  <a href="http://www.liftweb.net">
+    Lift
+  </a>
+  for turning Textile markup
+  <br></br>
+  into HTML is pretty easy to use.
+</p><ul>
+  <li> As you can see.</li>
+  <li> In this example.</li>
+</ul>
+---------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+使用一个Lift的模块不需要其他多余的code, 但是这里有一些我们编程的习惯: 他们通常被包装成 _net.liftmodules_, 但是也不是都是这样的; 他们通常依赖于某一个版本的Lift; 他们通常使用hook在 `LiftRules`中来提供一种特定的服务. 每一个人都可以建立和公开一个Lift的模块, 并且任何人都可以给现有的模块做贡献. 最后, 他们在SBT中被声明为依赖库, 然后和你使用其他依赖库一样使用.
+
+一个依赖库的名字有两部分组成: 模块使用的Lift版本, 就像在 <<ModuleVersioning>> 中讲解的一样. 当我们说"版本"的时候, 我们指得是第一个可用的Lift版本. 这意味着, 这个模块将对比此版本更新的版本兼容.
+
+[[ModuleVersioning]]
+.The structure of a module version.
+image::images/moduleversioning.png[width=640]
+
+这个结构被采用, 是因为模块有自己的发行周期, 和Lift的周期不同. 然而, 模块也基于现在Lift的功能和Lift改变自己的API在每个主要版本中, 因此, 使用Lift版本的一部分来定义模块名称是非常必要的.
+
+
+
+See Also
+^^^^^^^^
+
+并没有一个准备的对Textile的定义, 但是这里有一些关于mark up和HTML的用法的引用, 也许对你有帮助; http://redcloth.org/hobix.com/textile/[http://redcloth.org/hobix.com/textile/].
+
+Textile 模块的主页: https://github.com/liftmodules/textile[https://github.com/liftmodules/textile].
+
+对Textile的Unit test,　可以让你更好的了解使用的方法和一些有用的示例: https://github.com/liftmodules/textile/blob/master/src/test/scala/net/liftmodules/textile/TextileSpec.scala[https://github.com/liftmodules/textile/blob/master/src/test/scala/net/liftmodules/textile/TextileSpec.scala].
+
+<<modules>> 介绍了如何建立一个模块.
+

@@ -1,0 +1,812 @@
+[[Pipeline]]
+请求通道
+-------
+
+当一个请求到Lift的时候, 你可以在很多个地方设置Lift, 来调整Lift的行为, 或者返回各种回复, 或者做访问控制.  在这章中, 我们来看看各种的 `LiftResponse` 和通道设置.
+
+在这个链接里, 你可以看到关于通道的各种信息, 包括形成图和如何工作的 http://www.assembla.com/spaces/liftweb/wiki/HTTP_Pipeline[http://www.assembla.com/spaces/liftweb/wiki/HTTP_Pipeline].
+
+请见 https://github.com/LiftCookbook/cookbook_pipeline[https://github.com/LiftCookbook/cookbook_pipeline] 里面有这章的源代码.
+
+
+[[DebugRequest]]
+Debug一个Request
+~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想Debug一个请求, 并且看请求是如何到达Lift应用的
+
+Solution
+^^^^^^^^
+
+添加一个 `onBeginServicing` 方法在 `Boot.scala` 去看请求的log.
+
+比如说:
+
+[source,scala]
+-----------------------------------
+LiftRules.onBeginServicing.append {
+  case r => println("Received: "+r)
+}
+-----------------------------------
+
+Discussion
+^^^^^^^^^^
+
+这里的 `onBeginServicing` 调用是在Lift早期的, 在 `S` 被设置前, 并且在返回404前.  这个方程需要的参数为 `Req => Unit`. 我们只做Log, 但是这个方法可以用在被的地方.
+
+如果你想用当前路径. 比如说, 测试错有开始为_/paypal_的路径:
+
+[source,scala]
+-----------------------------------------------------
+LiftRules.onBeginServicing.append {
+  case r @ Req("paypal" :: _), _, _) => println(r)
+}
+-----------------------------------------------------
+
+这个匹配会匹配到任何开始为_/paypal_, 我们将忽略后缀和请求类型 (e.g., GET, POST or so on).
+
+还有一个方法叫 `LiftRules.early` 在 `onBeginServicing`之前被调用.  它需要一个 `HTTPRequest => Unit` 方法, 所以它有底层的 `Req` 使用在 `onBeginServicing`.  然而, 它将被所有通过Lift处理的请求所调用. 比如说, 你可以设置一些请求, 让container自己处理:
+
+[source,scala]
+-----------------------------------------------------
+LiftRules.liftRequest.append {
+  case Req("robots" :: _, _, _) => false
+}
+-----------------------------------------------------
+
+文件 _robots.txt_ 将会存储 `LiftRules.early` 的log, 但是其他的方法不会被log.
+
+如果你需要访问states (比如说, `S`), 请使用 `earlyInStateful`, 它是基于 `Box[Req]` 而不是 `Req`:
+
+[source,scala]
+-----------------------------------------------------
+LiftRules.earlyInStateful.append {
+  case Full(r) => // access S here
+  case _ =>
+}
+-----------------------------------------------------
+
+你可以调用两次 `earlyInStateful` 方法. 这将会发生, 当session被重置.  你可以通过匹配一个请求在Lift中, 来防止它:
+
+[source,scala]
+-----------------------------------------------------
+LiftRules.earlyInStateful.append {
+  case Full(r) if LiftRules.getLiftSession(r).running_? => // access S here
+  case _ =>
+}
+-----------------------------------------------------
+
+最后, Lift有一个 `earlyInStateless` 方法和 `earlyInStateful` 一样. 它使用 `Box[Req]` , 不过在其他地方和 `onBeginServicing`一样. 它被触发在 `early` 之后, 但是在 `earlyInStateful`之前.
+
+总结, 以上提到的方法, 调用顺序为:
+
+* `LiftRules.early`
+* `LiftRules.onBeginServicing`
+* `LiftRules.earlyInStateless`
+* `LiftRules.earlyInStateful`
+
+
+
+See Also
+^^^^^^^^
+
+如果你想要在最后catch一个请求, 请使用 `onEndServicing`, 它以一个 `(Req, Box[LiftResponse]) => Unit` 作为参数.
+
+<<RunningStateless>> 讲述了如何使一个请求为stateless.
+
+
+
+
+
+[[OnSession]]
+执行一个代码, 当session被破坏, 或者丢失
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想执行一些命令, 当一个session被建立或者丢失.
+
+Solution
+^^^^^^^^
+
+请使用 `LiftSession`. 比如说在 `Boot.scala` 中:
+
+[source,scala]
+------------------------------------------------------------
+LiftSession.afterSessionCreate ::=
+ ( (s:LiftSession, r:Req) => println("Session created") )
+
+LiftSession.onBeginServicing ::=
+ ( (s:LiftSession, r:Req) => println("Processing request") )
+
+LiftSession.onShutdownSession ::=
+ ( (s:LiftSession) => println("Session going away") )
+------------------------------------------------------------
+
+如果请求被标为stateless在`LiftRules.statelessReqTest` 中, 以上的代码将只执行 `onBeginServicing` 方法.
+
+Discussion
+^^^^^^^^^^
+
+在 `LiftSession`中, 允许你添加代码在很多的插入点中: 当session建立后, 在服务开始的时候, 在服务结束后, 当session停止的时候, 在停止中, 等等... 在这章开始的时候的形成图, 介绍了这些插入点的位置.
+
+请注意, Lift的session和HTTP的session是不一样的. Lift有自己的session管理.  它在这里有讲述 _Exploring Lift_ (see _See Also_).
+
+下面是各个插入点的介绍:
+
+* `onSetupSession` -- 这是第一个被调用的插入点.
+* `afterSessionCreate` -- 当所有的 `onSetupSession` 方法被调用完成后, 调用这个.
+* `onBeginServicing` -- 在request被处理的开始阶段.
+* `onEndServicing` -- 在request被处理的最后阶段.
+* `onAboutToShutdownSession` -- 当session关闭的时候, 比如说Lift应用被关闭, 或者Lift丢失session.
+* `onShutdownSession` -- 在 `onAboutToShutdownSession` 方法后调用.
+
+如果你测试这些插入点, 你也许希望一个session快速的过期, 而不是等待30分钟后.  为了实现它, 提供一个毫秒到 `LiftRules.sessionInactivityTimeout`:
+
+[source,scala]
+------------------------------------------------------------
+// 30 second inactivity timeout
+LiftRules.sessionInactivityTimeout.default.set(Full(1000L * 30))
+------------------------------------------------------------
+
+在 `LiftSession` 中还有其他两种插入点: `onSessionActivate` 和 `onSessionPassivate`. 他们也许在你使用分布式的容器中有用, 他们使用来设置容器来进行序列化和非系列化的. 其实他们很少被用到.
+
+
+See Also
+^^^^^^^^
+
+Session管理在 _Exploring Lift_: http://exploring.liftweb.net/[http://exploring.liftweb.net/].
+
+<<RunningStateless>> 解释了如何运行应用stateless.
+
+
+
+[[ShutdownHooks]]
+执行代码当Lift停止
+~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想在Lift停止工作的时候, 运行一些代码.
+
+Solution
+^^^^^^^^
+
+使用 `LiftRules.unloadHooks`.
+
+[source,scala]
+--------------------------------------------------------------
+LiftRules.unloadHooks.append( () => println("Shutting down") )
+--------------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+你添加一个 `() => Unit` 到 `unloadHooks`, 他们会在Lift最后的阶段执行, 在session被摧毁前, Lift actor已经停止工作, request也将被停止.
+
+他们将被触发在Java容器中, "by the web container to indicate to a filter that it is
+being taken out of service".
+
+See Also
+^^^^^^^^
+
+<<RunTasksPeriodically>> 讲述了一个unhook的例子.
+
+
+
+
+
+[[RunningStateless]]
+运行在Stateless环境下
+~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想强制你的应用, 在HTTP下, 是一个Stateless的.
+
+Solution
+^^^^^^^^
+
+在 `Boot.scala`:
+
+[source,scala]
+----------------------------------------------------
+LiftRules.enableContainerSessions = false
+LiftRules.statelessReqTest.append { case _ => true }
+----------------------------------------------------
+
+所有的请求将被视为Stateless. 任何常识访问一个State的动作, 如`SessionVar`, 将会触发一个警告: "Access to Lift's statefull features from Stateless mode.
+The operation on state will not complete."
+
+Discussion
+^^^^^^^^^^
+
+HTTP session的建立是通过 `enableContainerSessions`, 并且使用在所有请求上. 默认情况下(`true`), 他允许一个细腻的操作在stateless下.
+
+使用 `statelessReqTest` 将允许你决定, 基于 `StatelessReqTest` case class, 来判断一个请求是否是stateless (`true`) 或者 (`false`).
+
+比如说:
+
+[source,scala]
+-----------------------------------------------------------------
+def asset(file: String) =
+  List(".js", ".gif", ".css").exists(file.endsWith)
+
+LiftRules.statelessReqTest.append {
+  case StatelessReqTest("index" :: Nil, httpReq) => true
+  case StatelessReqTest(List(_, file),  _) if asset(file) => true
+}
+-----------------------------------------------------------------
+
+这个例子只使index上, 所有的GIF, JavaScript和CSS文件 stateless.  `httpReq` 部分是一个 `HTTPRequest` 实例, 允许你以内容来做决定 (cookies, user agent, etc).
+
+另一个选项是 `LiftRules.statelessDispatch` 他允许你注册一个方法, 并返回`LiftResponse`. 它将被执行在无session环境下, 这便于使用 REST 服务.
+
+如果你只想让其中的一个页面变成Stateless, 你可以这样:
+
+[source,scala]
+-----------------------------------------------------------------
+Menu.i("Stateless Page") / "demo" >> Stateless
+-----------------------------------------------------------------
+
+一个对 _/demo_ 链接的request将是Stateless.
+
+
+See Also
+^^^^^^^^
+
+<<REST>> 中包含了如何使用REST在Lift中.
+
+Lift Wiki有更多关于Stateless的介绍: http://www.assembla.com/wiki/show/liftweb/Stateless_Requests[http://www.assembla.com/wiki/show/liftweb/Stateless_Requests].
+
+Stateless是在Lift2.2中介绍的,  这里有更多介绍: https://groups.google.com/d/msg/liftweb/2rVMCnWppSo/KoaUMHeQAEAJ[https://groups.google.com/d/msg/liftweb/2rVMCnWppSo/KoaUMHeQAEAJ].
+
+
+
+
+[[CatchException]]
+Catch任何异常
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想让所有的request都在一个包裹中, 并且提示用户那里出现了异常.
+
+Solution
+^^^^^^^^
+
+声明一个异常处理器在 `Boot.scala` :
+
+[source,scala]
+--------------------------------------------------
+LiftRules.exceptionHandler.prepend {
+  case (runMode, request, exception) =>
+    logger.error("Failed at: "+request.uri)
+    InternalServerErrorResponse()
+}
+--------------------------------------------------
+
+以上例子中, 所有的异常在run mode将被匹配, 并且返回一个500状态 (internal
+server error) 到浏览器.
+
+Discussion
+^^^^^^^^^^
+
+这里, `exceptionHandler` 方法需要一个参数, 它是一个方法返回一个 `LiftResponse` (比如说, 一些你需要发送到浏览器的提示). 默认的行为是返回 `XhtmlResponse`, 并且在 `Props.RunModes.Development` 中将给出异常的详细信息, 并且在其他别的run mode中返回: "Something unexpected happened".
+
+你可以返回任意类型的 `LiftResponse`, 包括 `RedirectResponse`,
+`JsonResponse`, `XmlResponse`, `JavaScriptResponse`, 等等.
+
+上面的例子只是返回一个500异常, 这对你的用户来说, 不太方便.
+你可以使用一个自定义的页面来显示异常, 不过保持异常的状态为500, 因为这对外部监视服务很重要:
+
+[source,scala]
+--------------------------------------------------
+LiftRules.exceptionHandler.prepend {
+  case (runMode, req, exception) =>
+    logger.error("Failed at: "+req.uri)
+    val content = S.render(<lift:embed what="500" />, req.request)
+    XmlResponse(content.head, 500, "text/html", req.cookies)
+}
+--------------------------------------------------
+
+在这里, 我们返回一个500异常, 但是内容是一个 `Node`, 它是运行 `src/main/webapp/template-hidden/500.html` 的结果.  这样你就可以用来提示用户:
+
+[source,html]
+--------------------------------------------------
+<html>
+<head>
+  <title>500</title>
+</head>
+<body data-lift-content-id="main">
+<div id="main" data-lift="surround?with=default;at=content">
+  <h1>Something is wrong!</h1>
+  <p>It's our fault - sorry</p>
+</div>
+</body>
+</html>
+--------------------------------------------------
+
+当处理Ajax时, 你可以控制哪些发送到浏览器.  在下面的例子中, 我们匹配Ajax的POST, 然后返回一个自定义的JavaScript到浏览器:
+
+[source,scala]
+-----------------------------------------------------
+import net.liftweb.http.js.JsCmds._
+
+val ajax = LiftRules.ajaxPath
+
+LiftRules.exceptionHandler.prepend {
+  case (mode, Req(ajax :: _, _, PostRequest), ex) =>
+    logger.error("Error handing ajax")
+    JavaScriptResponse(Alert("Boom!"))
+}
+-----------------------------------------------------
+
+你可以测试这个代码, 通过建立一个按钮, 每次按的时候都返回一个异常:
+
+
+[source,scala]
+-----------------------------------------------------
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml
+
+class ThrowsException {
+  private def fail = throw new Error("not implemented")
+
+  def render = "*" #> SHtml.ajaxButton("Press Me", () => fail)
+}
+-----------------------------------------------------
+
+这个Ajax代码将运行在Lift默认的Ajax行为之前. 默认的行为是尝试三次 (`LiftRules.ajaxRetryCount`), 然后运行 `LiftRules.ajaxDefaultFailure`, 它将弹出一个对话框: "The
+server cannot be contacted at this time"
+
+See Also
+^^^^^^^^
+
+<<Custom404>> 讲述了如何子自定义一个404页面.
+
+
+
+
+
+[[RestStreamContent]]
+Stream形式的内容
+~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想以Stream的形式发送内容到浏览器
+
+Solution
+^^^^^^^^
+
+使用 `OutputStreamResponse`. 它需要一个参数,返回Lift支持的 `OutputStream`.
+
+在这里例子中, 我们将Stream所有的整数, 返回到浏览器:
+
+[source,scala]
+-------------------------------------------------------------------
+package code.rest
+
+import net.liftweb.http.{Req,OutputStreamResponse}
+import net.liftweb.http.rest._
+
+object Numbers extends RestHelper {
+
+  // Convert a number to a String, and then to UTF-8 bytes
+  // to send down the output stream.
+  def num2bytes(x: Int) = (x + "\n") getBytes("utf-8")
+
+  // Generate numbers using a Scala stream:
+  def infinite = Stream.from(1).map(num2bytes)
+
+  serve {
+    case Req("numbers" :: Nil, _, _) =>
+      OutputStreamResponse( out => infinite.foreach(out.write) )
+  }
+}
+-------------------------------------------------------------------
+
+Scala的 `Stream` 类是生成一个序列的lazy计算. 它的值是被 `infinite` 计算后, 返回浏览器.
+
+你需要把它连入 `Boot.scala`:
+
+[source,scala]
+----------------------------------
+LiftRules.dispatch.append(Numbers)
+----------------------------------
+
+浏览 _http://127.0.0.1:8080/numbers_ 将会返回一个200状态代码, 并且开始从1生成整数. 整数的生成很快, 所以你肯定不希望使用浏览器看它, 所以请使用一些能让它停止的工具, 比如cURL.
+
+Discussion
+^^^^^^^^^^
+
+`OutputStreamResponse` 需要一个 `OutputStream => Unit` 类型的方法. `OutputStream` 的参数是输出的Stream到浏览器. 这意味着我们写入Stream的Byte都会传入浏览器. 在上个例子中...
+
+[source,scala]
+-----------------------------------
+OutputStreamResponse(out => infinite.foreach(out.write))
+-----------------------------------
+
+...我们这里使用 `write(byte[])` 方法在Java的 `OutputStream` (`out`)上, 并且以 `infinite` 生成的 `Array[Byte]`做参数.
+
+为了有更多的控制在state code, headers 和 cookies, `OutputStreamResponse` 对象有另一个签名. 为了更多的控制, 建立一个 `OutputStreamResponse` 的实例:
+
+[source,scala]
+-----------------------------------
+case class OutputStreamResponse(
+  out: (OutputStream) => Unit,
+  size: Long,
+  headers: List[(String, String)],
+  cookies: List[HTTPCookie],
+  code: Int)
+-----------------------------------
+
+任何你设置的header (比如 `Content-type`), 或者 status code, 会在你输出方法前被设置好.请注意, 设置 `size` 为 `-1` 使得 `Content-length` header 被忽略.
+
+还有另外两种相同类型的response: `InMemoryResponse` 和 `StreamingResponse`.
+
+InMemoryResponse
+++++++++++++++++
+
+`InMemoryResponse` 方法, 在你已经组装好了内容准备发送到浏览器的时候, 非常游泳. 它的参数非常直接:
+
+[source,scala]
+-----------------------------------
+case class InMemoryResponse(
+  data: Array[Byte],
+  headers: List[(String, String)],
+  cookies: List[HTTPCookie],
+  code: Int)
+-----------------------------------
+
+作为一个例子, 我们修改刚才的代码, 强制 `infinite` 序列生成一些 `Array[Byte]` 在内存中:
+
+[source,scala]
+-----------------------------------
+import net.liftweb.util.Helpers._
+
+serve {
+  case Req(AsInt(n) :: Nil, _, _) =>
+    InMemoryResponse(infinite.take(n).toArray.flatten, Nil, Nil, 200)
+}
+-----------------------------------
+
+这里的 `AsInt` 是Lift的一个用来匹配整数的方法, 这意思是, 这个请求开始为一个整数, 然后我们会返回相同数量的整数在回复中. 我们这里没有设置 headers 或者 cookies, 以下是测试:
+
+-----------------------------------
+$ curl http://127.0.0.1:8080/3
+1
+2
+3
+-----------------------------------
+
+
+
+StreamingResponse
++++++++++++++++++
+
+`StreamingResponse` 把byte数据从Stream中拉出. 这个行为和 `OutputStreamResponse` 的, 把数据push到客户端, 相反.
+
+为了建立这类的回复, 我们提供一个有 `read` 方法的类:
+
+[source,scala]
+-------------------------------------------
+case class StreamingResponse(
+  data: {def read(buf: Array[Byte]): Int},
+  onEnd: () => Unit,
+  size: Long,
+  headers: List[(String, String)],
+  cookies: List[HTTPCookie],
+  code: Int)
+-------------------------------------------
+
+请注意, `data` 参数的结构的使用. 任何 `read` 方法都可以使用在这里, 包括 `java.io.InputStream` - 比如 objects, 这意味着 `StreamingResponse` 可以作为一个管道从输入到输出. 
+
+你的 `data` `read` 方法应该遵循JavaIO的语法 "the total number of bytes read into the buffer, or -1 is thereis no more data because the end of the stream has been reached".
+
+See Also
+^^^^^^^^
+
+JavaIO的约定在这里有介绍: http://docs.oracle.com/javase/6/docs/api/java/io/InputStream.html[http://docs.oracle.com/javase/6/docs/api/java/io/InputStream.html].
+
+
+
+
+[[DiskAccessControl]]
+使用访问控制在文件服务上
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你在本地硬盘有一个文件, 你想让用户下载它, 但是只是特定的用户. 如果他们不允许, 你想告诉他们为什么.
+
+Solution
+^^^^^^^^
+
+使用 `RestHelper` 去处理一个下载, 或者解释页面.
+
+比如说, 我们有一个文件 _/tmp/important_ , 我们只想让用户从以下链接下载 _/download/important_ . 代码如下:
+
+
+[source,scala]
+-------------------------------------------------------
+package code.rest
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.{StreamingResponse, LiftResponse, RedirectResponse}
+import net.liftweb.common.{Box, Full}
+import java.io.{FileInputStream, File}
+
+object DownloadService extends RestHelper {
+
+  // (code explained below to go here)
+
+  serve {
+    case "download" :: Known(fileId) :: Nil Get req =>
+      if (permitted) fileResponse(fileId)
+      else Full(RedirectResponse("/sorry"))
+  }
+}
+-------------------------------------------------------
+
+我们允许用户下载 "known" 文件. 这就是我们遇到的文件. 我们这么做是因为, 如果你把内部文件结构展示给用户, 那么你的服务端将收到威胁.
+
+比如说, `Known` 检查一个静态的文件列表:
+
+[source,scala]
+---------------------------------------------------------------------------
+val knownFiles = List("important")
+
+object Known {
+ def unapply(fileId: String): Option[String] = knownFiles.find(_ == fileId)
+}
+---------------------------------------------------------------------------
+
+对于那些已知文件的请求, 我们的REST将变成 `Box[LiftResponse]`. 对于被允许访问的, 我们使用:
+
+[source,scala]
+---------------------------------------------------------------------
+private def permitted = scala.math.random < 0.5d
+
+private def fileResponse(fileId: String): Box[LiftResponse] = for {
+    file <- Box !! new File("/tmp/"+fileId)
+    input <- tryo(new FileInputStream(file))
+ } yield StreamingResponse(input,
+    () => input.close,
+    file.length,
+    headers=Nil,
+    cookies=Nil,
+    200)
+---------------------------------------------------------------------
+
+如果不允许访问, 用户将跳转到 `/sorry.html`.
+
+以上所有的代码将连入 `Boot.scala` :
+
+[source,scala]
+------------------------------------------
+LiftRules.dispatch.append(DownloadService)
+------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+通过转变一个request到 `Box[LiftResponse]`, 我们可以提供下载服务, 让用户跳转到不同页面, 并且让Lift处理 404 (`Empty`).
+
+如果我们添加一个测试去查看是否文件在 `fileResponse`, 那会造成一个处理 `empty` 的请求,
+将会触发一个404. 在代码上来看, 如果文件不存在,方法 `tryo` 将返回 `Failure`, 它将是一个 404 错误, 并且包含 "/tmp/important (No such file or directory)".
+
+因为我们测试的是一个已知的源,  `Known` 解析器将解析将作为部分的匹配在 _/download/_ 上, 一个未知的源将不会通过 `File` 访问代码. 所以, Lift将返回404.
+
+一个Guard表达式将同样可以很好的作用在这里:
+
+[source,scala]
+----------------------------------------------------------------------------
+serve {
+  case "download" :: Known(id) :: Nil Get _ if permitted => fileResponse(id)
+  case "download" :: _ Get req => RedirectResponse("/sorry")
+}
+----------------------------------------------------------------------------
+
+你可以混合和匹配extractors, guards 和 conditions 在你的回复中, 使得他们更好的为你工作.
+
+See Also
+^^^^^^^^
+
+_Chatper 24: Extractors_ from _Programming in Scala_: http://www.artima.com/pins1ed/extractors.html[http://www.artima.com/pins1ed/extractors.html].
+
+
+
+
+[[RestrictByHeader]]
+HTTP Header 访问控制
+~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你希望进行访问控制, 基于HTTPheader.
+
+Solution
+^^^^^^^^
+
+使用一个自定义的 `If` 在 SiteMap 中:
+
+[source,scala]
+----
+val HeaderRequired = If(
+  () => S.request.map(_.header("ALLOWED") == Full("YES")) openOr false,
+  "Access not allowed"
+)
+
+// Build SiteMap
+val entries = List(
+  Menu.i("Header Required") / "header-required" >> HeaderRequired
+)
+----
+
+在这里例子中, _header-required.html_ 只可以被有HTTP header 为 `ALLOWED`并且值为`YES`的请求访问. 其他的请求将被拒绝, 并返回 "Access not allowed".
+
+这个代码可以被测试通过使用工具cURL:
+
+----
+$ curl http://127.0.0.1:8080/header-required.html -H "ALLOWED:YES"
+----
+
+Discussion
+^^^^^^^^^^
+
+这里, `If` 测试确保了 `() => Boolean` 方法的第一个参数将返回 `true`, 在页面加载之前. 在这里例子中, 我们将会得到true, 在请求的header中包含 "ALLOWED", 并且它的值为 `Full("YES")`. 这是一个 `LocParam` (location parameter), 它将会修改 site map. 他可以添加任何的menu通过使用 `>>` 方法.
+
+请注意, 如果没有header, 测试依旧是false. 这意味着方法 `Menu.builder` 将无法生成链接.
+
+方法 `If()` 的第二个参数是告诉Lift该做什么, 当用户尝试访问页面, 并且测试的结果不是true的时候. 它是一个 `() => LiftResponse` 方法.  这意味着, 返回任何你想返回的, 包括跳转到其他页面. 在这里例子中, 我们使用了方便的转化方法从一个 `String` ("Access not allowed"), 到一个跳转到其他页面的回复.
+
+如果你访问页面, 并且请求没有header, 你将会看到 "Access not allowed". 它将是主页, 不过这只是默认的.
+
+你可以让Lift显示一个不同的页面通过设置, `siteMapFailRedirectLocation` 在 `Boot.scala`:
+
+[source,scala]
+----
+LiftRules.siteMapFailRedirectLocation = "static" :: "permission" :: Nil
+----
+
+如果这时, 你想访问 _header-required.html_, 并且没有header, 你将会被跳转到 _/static/permission_ 并且显示所有你放到那个页面上的内容.
+
+
+See Also
+^^^^^^^^
+
+Lift Wiki上有一个总结, 是关于Lift的Sitemap和关于Sitemap的测试的: https://www.assembla.com/wiki/show/liftweb/SiteMap[https://www.assembla.com/wiki/show/liftweb/SiteMap].
+
+这里有更多的解释: chapter 7 of _Exploring Lift_ at http://exploring.liftweb.net[http://exploring.liftweb.net], and "SiteMap and access control", chapter 7 of _Lift in Action_ (Perrett, 2012, Manning Publications Co.).
+
+
+
+
+
+[[HttpServletRequest]]
+访问 `HttpServletRequest`
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+为了实现一些API, 你想访问 `HttpServletRequest`.
+
+Solution
+^^^^^^^^
+
+通过 `S.request`:
+
+[source,scala]
+-----------------------------------------------------------
+import net.liftweb.http.S
+import net.liftweb.http.provider.servlet.HTTPRequestServlet
+import javax.servlet.http.HttpServletRequest
+
+def servletRequest: Box[HttpServletRequest] = for {
+  req <- S.request
+  inner <- Box.asA[HTTPRequestServlet](req.request)
+} yield inner.req
+-----------------------------------------------------------
+
+你可以使用API:
+
+[source,scala]
+----------------------------------------------
+servletRequest.foreach { r => yourApiCall(r) }
+----------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+Lift从底层的HTTP请求中抽象出来, 并且能访问更细节的servlet容器.  然而, 如果你想用底层的HTTP, 你将可以访问它.
+
+请注意, 方法 `servletRequest` 将返回 `Box` 因为当你计算 `servletRequest` 的时候, 这里也许不会返回一个值 -- 或者你正在使用的是一个非标准的servlet容器.
+
+如果你的代码对Java Servlet API有很强的依赖性, 你将需要添加如下依赖库:
+
+[source,scala]
+-------------------------------------------------------------
+"javax.servlet" % "servlet-api" % "2.5" % "provided->default"
+-------------------------------------------------------------
+
+
+
+
+
+
+[[RewriteForHttps]]
+强制HTTPS请求
+~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想强制你的客户端使用HTTPS.
+
+Solution
+^^^^^^^^
+
+添加一个 `earlyResponse` 方法在 `Boot.scala` 把HTTP请求变成等价的HTTPS. 比如说:
+
+[source,scala]
+---------------------------------------------------------------------------------------
+LiftRules.earlyResponse.append { (req: Req) =>
+  if (req.request.scheme != "https") {
+    val uriAndQuery = req.uri + (req.request.queryString.map(s => "?"+s) openOr "")
+    val uri = "https://%s%s".format(req.request.serverName, uriAndQuery)
+    Full(PermRedirectResponse(uri, req, req.cookies: _*))
+  }
+  else Empty
+}
+---------------------------------------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+这里的 `earlyResponse` 调用是在Lift处理请求的早期. 这是用来运行一些代码, 在Lift开始处理请求之前. 如果他被设置, Lift将推出通道, 并且返回一个response. 这个方法的参数为 `Req => Box[LiftResponse]`.
+
+在这个例子中, 我们测试它, 通过一个不是 "https" 的请求, 然后再使用一个 "https" 并且把它其余的参数添加到https上. 当建立好的时候, 我们跳转到一个新的URL上, 里面包含着所有以前的信息.
+
+通过把其他请求计算为 `Empty` (比如说, https requets), Lift将会继续的将请求放到通道中.
+
+理想的情况下, Lift确保请求通过web服务器设置, 被处理在一个正确的scheme下, 比如说 Apache 或者 Nginx. 但是在一些情况下是不可能的, 比如说你把你的应聘放到PaaS. 比如说 CloudBees.
+
+Amazon负载平衡 
++++++++++++++
+
+对于Amazon的负载平衡, 你需要使用`X-Forwarded-Proto` header 去察觉 HTTPS. 像其他文档提到的 _Overview of Elastic Load Balancing_ , "Your server access logs
+contain only the protocol used between the server and the load balancer;
+they contain no information about the protocol used between the client
+and the load balancer."
+
+在这个情况下, 修改上个例子从:
+`req.request.scheme != "https"` 到:
+
+
+[source,scala]
+------------------------------------------------
+req.header("X-Forwarded-Proto") != Full("https")
+------------------------------------------------
+
+See Also
+^^^^^^^^
+
+The _Overview of Elastic Load Balancing_ 文档在: http://docs.amazonwebservices.com/ElasticLoadBalancing/latest/DeveloperGuide/arch-loadbalancing.html[http://docs.amazonwebservices.com/ElasticLoadBalancing/latest/DeveloperGuide/arch-loadbalancing.html].
+
+

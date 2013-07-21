@@ -1,0 +1,749 @@
+[[Forms]]
+Lift的表格处理
+------------
+
+这章给出了使用Lift 表格的各种方法.  你会在以下地址找到更多的例子: https://github.com/LiftCookbook/cookbook_forms[https://github.com/LiftCookbook/cookbook_forms].
+
+
+[[PlainFormProcessing]]
+老式的表格处理
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用一个非AJAX的方法来处理表格数据.
+
+Solution
+^^^^^^^^
+
+使用 `S.param` 来解析数据, 然后生成输出.
+
+比如说, 我们可以展示一个表格, 处理输入数据, 然后返回一个提示.  HTML模版一般是HTML表格, 和一个snippet:
+
+
+[source,html]
+------------------
+<form data-lift="Plain" action="/plain" method="post">
+  <input type="text" name="name" placeholder="What's your name?">
+  <input type="submit" value="Go" >
+</form>
+------------------
+
+在这里例子中,我们可以得到 "name" 的值通过使用 `S.param("name")`:
+
+[source,scala]
+------------------
+package code.snippet
+
+import net.liftweb.common.Full
+import net.liftweb.http.S
+import net.liftweb.util.PassThru
+
+object Plain {
+
+  def render = S.param("name") match {
+    case Full(name) =>
+      S.notice("Hello "+name)
+      S.redirectTo("/plain")
+    case _ =>
+      PassThru
+  }
+
+}
+------------------
+
+当你的浏览器读取到数据时, 如果是第一次, 因为没有URL参数, 所以不执行任何操作. 然后你可以在name区域输入一些值, 然后提交表格. 这个行为会让Lift再次处理模版, 但是这次因为有"name"的input.  结果将时跳到另一个页面, 并显示一个提示.
+
+
+Discussion
+^^^^^^^^^^
+
+手动的从URL中提取数据, 这不是Lift推荐的, 但是有时候你需要这么做,  `S.param` 是你取得URL参数值的一种方法.
+
+
+`S.param` 的结果是一个 `Box[String]`, 在上一个例子中, 我们使用匹配来处理数据.  当你处理超过一个参数的时候 `S.param` 是这样使用的:
+
+[source,scala]
+------------------
+def render = {
+  for {
+    name <- S.param("name")
+    pet <- S.param("petName")
+  } {
+    S.notice("Hello %s and %s".format(name,pet))
+    S.redirectTo("/plain")
+  }
+
+ PassThru
+}
+------------------
+
+如果"name" 和 "petName" 都有值,  _for_ 里面的语句将被执行.
+
+
+相关的 `S` 方法包括:
+
+* `S.params(name)` -- 处理一个 `List[String]`, 然后返回他们在URL参数上的值.
+* `S.post_?`, `S.get_?`-- 看request是 GET 或者 POST.
+* `S.getRequestHeader(name)` -- 使用 `Box[String]` 作为header.
+* `S.request` -- 用来访问 `Box[Req]`, 它会给你访问一个特定信息的能力.
+
+作为一个使用 `S.request`的例子,  我们可以处理一个 `List[String]` 中所有的request参数 包含 "name" :
+
+[source,scala]
+------------------
+val names = for {
+  req <- S.request.toList
+  paramName <- req.paramNames
+  if paramName.toLowerCase contains "name"
+  value <- S.param(paramName)
+} yield value
+------------------
+
+请注意, 当打开 `S.request` 时, 我们可以访问所有丢的参数通过 `paramNames` 方法在 `Req`上.
+
+Screen 和 Wizard 提供了其他可供选择的表格处理方法, 但是有时候, 你需要取得request中的值, 这时候, 你需要使用这章的内容.
+
+See Also
+^^^^^^^^
+
+_Simply Lift_ 里面有很多表格处理的方法.  请看: http://simply.liftweb.net[http://simply.liftweb.net].
+
+
+
+
+[[AjaxFormProcessing]]
+Ajax表格处理
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想处理一个表格通过Ajax, 而不是重载整个页面.
+
+Solution
+^^^^^^^^
+
+请标注你的表格为 `data-lift="form.ajax"` 然后, 在服务端提供一个需要运行的方法.
+
+这里有一个可以收集我们名字的表格的例子, 它通过Ajax提交到服务端:
+
+[source,html]
+---------------------------------------------------------
+<form data-lift="form.ajax">
+  <div data-lift="EchoForm">
+    <input type="text" name="name" placeholder="What's your name?">
+    <input type="submit">
+  </div>
+</form>
+
+<div id="result">Your name will be echoed here</div>
+---------------------------------------------------------
+
+以下的snippet会返回输入的名字:
+
+[source,scala]
+---------------------------------------------------------
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml.{text,ajaxSubmit}
+import net.liftweb.http.js.JsCmd
+import net.liftweb.http.js.JsCmds.SetHtml
+import xml.Text
+
+object EchoForm extends {
+
+  def render = {
+
+    var name = ""
+
+    def process() : JsCmd = SetHtml("result", Text(name))
+
+    "@name" #> text(name, s => name = s) &
+    "type=submit" #> ajaxSubmit("Click Me", process)
+  }
+}
+---------------------------------------------------------
+
+当你点击按钮时, 方法 `process` 被调用, 将会返回 `name` 的值, 并替换ID为 `result` 的HTML元素.
+
+请注意, 你会经常看到 `s => name = s` 被简写为 `name = _`.
+
+Discussion
+^^^^^^^^^^
+
+`data-lift="form.ajax"` 部分, 确保了Lift添加Ajax机制到表格中. 这意味着 `<form>` 在Lift修饰后, 会变成:
+
+[source,html]
+---------------------------------------------------------
+<form id="F2203365740CJME2G" action="javascript://"
+  onsubmit="liftAjax.lift_ajaxHandler(
+    jQuery('#'+&quot;F2203365740CJME2G&quot;).serialize(),
+    null, null, &quot;javascript&quot;);return false;">
+  ...
+</form>
+---------------------------------------------------------
+
+换句话说, 当表格被提交时, Lift会通过Ajax处理表格. 这意味着, 你根本不需要单独的提交按钮.  在这个例子中只有一个单一的text输入框, 当你省略了提交按钮, 你可以触发序列化通过按 _return_.  这回触发方法 `s => name = s` , 它被绑定在 `data-lift="EchoForm"` snippet中. 换句话说,  `name` 变量将被赋值, 即使没有提交按钮.
+
+添加一个提交按钮, 可以让我们处理一些行为, 当所有的输入框的方法都被执行过后.
+
+请注意, Lift的处理是序列化表格到服务器, 执行绑定输入框上的方法, 执行提交的按钮上的方法(如果存在), 然后返回一个JavaScript到客户端.
+
+Submit Styling
+++++++++++++++
+
+`SHtml.ajaxSubmit` 方法生成一个 `<input type="submit">` 元素到页面. 你也许想要一个可以设计的提交按钮. 比如说, 使用 Twitter Bootstrap, 一个button上有一个icon, 比如说如下:
+
+[source,html]
+---------------------------------------------------------
+<button id="submit" class="btn btn-primary btn-large">
+  <i class="icon-white icon-ok"></i> Submit
+</button>
+---------------------------------------------------------
+
+点击 `<button>` 在一个表格中会触发提交. 然而, 如果你把按钮通过 `Shtml.ajaxSubmit`绑定到, 将会丢失你的style.
+
+为了解决这个问题, 你可以设置一个方法到一个隐藏域上. 这个方法将被调用和其他的域上的方法一样.  
+在我们的snippet中, 唯一改变的是CSS selector binding:
+
+[source,scala]
+---------------------------------------------------------
+import net.liftweb.http.SHtml.hidden
+
+"@name" #> text(name, s => name = s) &
+"button *+" #> hidden(process)
+---------------------------------------------------------
+
+他将包含一个隐藏域, 比如说....
+
+[source,html]
+---------------------------------------------------------
+<input type="hidden" name="F11202029628285OIEC2" value="true">
+---------------------------------------------------------
+
+...然后当表格提交时, 隐藏域也提交, 和其他域一样, Lift将会调用绑定的方法: `process`.
+
+这个例子的用法像 `ajaxSubmit`, 但不完全一样. 在这个例子中我们添加了一个隐藏郁在 `<button>`之后, 但是你可以放在任何你觉得方便的地方. 然而, 这里有一点容易混淆: 什么时候`process` 被调用? 是在调用 `name` 前还是后? 这个由你域的先后顺序决定. 这就是说, 在你的HTML模版中, 把按钮放在文本域前,  `process` 方法在name绑定的方法前被掉用.
+
+还有很多其他的方法关于这个例子.  不管哪种方法, 请都保证你的隐藏域在最后, 或者保证你的方法在一个`formGroup`:
+
+[source,scala]
+---------------------------------------------------------
+import net.liftweb.http.SHtml.hidden
+import net.liftweb.http.S
+
+"@name" #> text(name, s => name = s) &
+"button *+" #> S.formGroup(1000) { hidden(process) }
+---------------------------------------------------------
+
+一个 `formGroup` 是一个而外的操控, 他可以让你的方法排序, 在这个例子中, 排序的结果是 `process` 被调用在group (0)之前.
+
+[NOTE]
+Lift 2.6 和 3.0 也许包含 `ajaxOnSubmit`, 它包含可靠的`ajaxSubmit` 和 灵活的隐藏域.  如果你想使用它在Lift 2.5,
+Antonio Salazar Cardozo 建立一个Helper, 你可以使用: https://gist.github.com/Shadowfiend/5042131[https://gist.github.com/Shadowfiend/5042131].
+
+
+
+See Also
+^^^^^^^^
+
+方法调用的顺序可以参考: http://www.assembla.com/spaces/liftweb/wiki/cool_tips[http://www.assembla.com/spaces/liftweb/wiki/cool_tips].
+
+
+
+
+
+[[JsonForms]]
+Ajax表格返回JSON
+~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想通过Ajax表格发送一个json到服务器.
+
+Solution
+^^^^^^^^
+
+使用 Lift的 `jlift.js` Javascript 和 `JsonHandler` 代码.
+请看如下HTML, 它不是一个表格, 但是使用 `jlift.js`:
+
+[source,html]
+---------------------------------------------------------
+<div data-lift="JsonForm" >
+
+ <!--  required for JSON forms processing -->
+ <script src="/classpath/jlift.js" data-lift="tail"></script>
+
+ <!--  placeholder script required to process the form -->
+ <script id="jsonFormScript" data-lift="tail"></script>
+
+ <div id="formToJson" name="formToJson">
+  <input type="text" name="name" value="Royal Society" />
+  <input type="text" name="motto" value="Nullius in verba" />
+  <input type="submit" name="sb" value="go!" />
+ </div>
+ <div id="result"></div>
+</div>
+---------------------------------------------------------
+
+服务端可以收到json, 通过使用如下code:
+
+[source,scala]
+---------------------------------------------------------
+package code.snippet
+
+import net.liftweb.util._
+import Helpers._
+
+import net.liftweb.http._
+import net.liftweb.http.js._
+import JsCmds._
+
+import scala.xml._
+
+class JsonForm {
+
+  def render =
+     "#formToJson" #> ((ns:NodeSeq) => SHtml.jsonForm(jsonHandler, ns)) &
+     "#jsonFormScript" #> Script(jsonHandler.jsCmd)
+
+    object jsonHandler extends JsonHandler {
+
+      def apply(in: Any): JsCmd = in match {
+          case JsonCmd("processForm", target, params: Map[String, _], all) =>
+            val name = params.getOrElse("name", "No Name")
+            val motto = params.getOrElse("motto", "No Motto")
+            SetHtml("result",
+                Text("The motto of %s is %s".format(name,motto)) )
+
+          case _ =>
+            SetHtml("result",Text("Unknown command"))
+      }
+
+    }
+}
+---------------------------------------------------------
+
+如果你点击go按钮, 然后关键网络流, 你会看到以下信息发送到服务器:
+
+[source,javascript]
+---------------------------------------------------------
+{
+  "command": "processForm",
+  "params": {"name":"Royal Society","motto":"Nullius in verba"}
+}
+---------------------------------------------------------
+
+服务器端将会把`results` 替换为
+"The motto of the Royal Society is Nullius in verba".
+
+Discussion
+^^^^^^^^^^
+
+这里需要注意的是:
+
+1.  `jlift.js` 脚本可以使用变量的json; 并且
+2.  生成 JavaScript code (`jsonHandler.jsCmd`), 这些都在表格提交时会用到.
+
+在绑定过程中, `SHtml.jsonForm` 使用 `jsonHandler` 对象来处理表格, 然后使用你的HTML模版包裹, `ns`, 和 `<form>` tag. 我们也绑定JavaScript 和 `jsonFormScript` 的placeholder.
+
+当表格提交时,  `JsonHandler.apply` 允许我们可以匹配一个input, 然后从 `Map` 中找到需要的值. 请注意, 这里编译的时候, 会出现 `Map[String,_]` 是一个 "unchecked since it is eliminated by erasure".
+
+如果你需要一个 REST service 处理 JSON,  请考虑使用REST HELPER.
+
+See Also
+^^^^^^^^
+
+* http://www.javabeat.net/2011/05/using-json-forms-with-ajax-in-lift-framework/[使用 JSON 表格和AJAX在 Lift Framework].
+
+* _Lift in Action_, section 9.1.4 "Using JSON forms with AJAX".
+
+*  Lift 应用展示: https://github.com/marekzebrowski/lift-basics[Simple form] processing.
+
+* Section 10.4, JSON, in
+http://exploring.liftweb.net/master/index-10.html[Exploring Lift].
+
+* http://en.wikipedia.org/wiki/Nullius_in_verba[Nullius in verba].
+
+
+
+[[DisableCheckbox]]
+条件性的disable一个checkbox
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想添加 `disabled` 属性到 `SHtml.checkbox`, 基于你现在的点击状态.
+
+Solution
+^^^^^^^^
+
+建立一个 CSS selector 转换来添加disabled属性, 并且在你的checkbox使用这个转换. 比如, 假设你有一个checkbox:
+
+[source,scala]
+---------------------------------------------------------
+class Likes {
+  var likeTurtles = false
+  def checkbox = "*" #> SHtml.checkbox(likeTurtles, likeTurtles = _ )
+}
+---------------------------------------------------------
+
+假设你想 disable 它在50%几率下:
+
+[source,scala]
+----
+def disabler =
+ if (math.random > 0.5d) "* [disabled]" #> "disabled"
+ else PassThru
+
+def conditionallyDisabledCheckbox =
+  "*" #> disabler( SHtml.checkbox(likeTurtles, likeTurtles = _ ) )
+----
+
+使用 `lift:Likes.conditionallyDisabledCheckbox` checkbox将会在一半的时间被disabled.
+
+Discussion
+^^^^^^^^^^
+
+命令 `disabler` 返回 `NodeSeq=>NodeSeq` , 这意味着
+当我们使用它在 `conditionallyDisabledCheckbox`中, 我们需要传递给它一个 `NodeSeq`, 而它正是由 `SHtml.checkbox` 提供的.
+
+CSS selector 的 `[disabled]` 不分是选择一个包含 disabled属性的元素, 然后使用 `#>` 替换它为右边的元素,  在这里个例子中是 "disabled".
+
+这个组合的意思是, 一半时间 disabled属性都被设置在checkbox上, 另一半时间 `NodeSeq`
+将没人碰, 因为 `PassThru` 没有改变 `NodeSeq`.
+
+以上的例子中, 我们没有test, 是为了让大家看例子更清楚. 你当然可以in-line测试它, 就像在mailing list, 如下的方法一样.
+
+See Also
+^^^^^^^^
+
+* Mailing list question regarding
+https://groups.google.com/d/topic/liftweb/KBVhkuM1NQQ/discussion[how to
+conditionally mark a SHtml.checkbox as disabled].
+
+* _Simply Lift_ http://simply.liftweb.net/index-7.10.html[7.10 CSS
+Selector Transforms].
+
+
+[[MultiSelectBox]]
+使用一个选择框进行多选
+~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想给用户展示很多可选项在一个多选box中,  然后允许用户多选他们.
+
+Solution
+^^^^^^^^
+
+使用 `SHtml.multiSelect`:
+
+[source,scala]
+----
+class MySnippet {
+  def multi = {
+    case class Item(id: String, name: String)
+    val inventory = Item("a", "Coffee") :: Item("b", "Milk") ::
+       Item("c", "Sugar") :: Nil
+
+     val options : List[(String,String)] =
+       inventory.map(i => (i.id -> i.name))
+
+     val default = inventory.head.id :: Nil
+
+     "#opts *" #>
+       SHtml.multiSelect(options, default, xs => println("Selected: "+xs))
+  }
+}
+----
+
+相关的HTML如下:
+
+[source,html]
+---------------------------------------------------------
+<div data-lift="MySnippet.multi?form=post">
+  <p>What can I getcha?</p>
+  <div id="opts">options go here</div>
+  <input type="submit" value="Submit" />
+</div>
+---------------------------------------------------------
+
+他们会被修饰为:
+
+[source,html]
+---------------------------------------------------------
+<form action="/" method="post"><div>
+  <p>What can I getcha?</p>
+  <div id="opts">
+   <select name="F25749422319ALP1BW" multiple="true">
+     <option value="a" selected="selected">Coffee</option>
+     <option value="b">Milk</option>
+     <option value="c">Sugar</option>
+   </select>
+  </div>
+  <input value="Submit" type="submit">
+</form>
+---------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+请回忆, 一个CSS selector由很多可选的参数, 他们中每一个都有一个属性和对应的值. 请看上边的例子, 他使用`inventory` 的对象, 然后返回 (value,name) 一对string, 叫做 `options`.
+
+给 `multiSelect`的方法, 将会使用value (ids), 而不是 names. 当你运行上边代码的时候 u安泽 "Coffee" 和 "Milk", 你将会看到`List("a", "b")`.
+
+Selected No Options
++++++++++++++++++++
+
+请注意, 如果没有任何选项被选, 你的方法叫不会被调用. 这个在ticket 1139中有提到过. 有一个解决方案, 是使用一个隐藏域并绑定方法. 比如说, 我们修改以上的code为stateful的snippet, 然后记录我们选择的值:
+
+[source,scala]
+---------------------------------------------------------
+class MySnippet extends StatefulSnippet {
+
+  def dispatch = {
+    case "multi" => multi
+  }
+
+  case class Item(id: String, name: String)
+  val inventory = Item("a", "Coffee") :: Item("b", "Milk") ::
+    Item("c", "Sugar") :: Nil
+
+  val options : List[(String,String)] = inventory.map(i => (i.id -> i.name))
+
+  var current = inventory.head.id :: Nil
+
+  def multi = "#opts *" #> (
+    SHtml.hidden( () => current = Nil) ++
+    SHtml.multiSelect(options, current, current = _)
+  )
+}
+---------------------------------------------------------
+
+每次提交表格后, `current` list会被设置为你在浏览器中选择的选项. 但是请注意, 我们有一个隐藏域, 可以重置 `current` 为一个空List, 这意味着, 在 `multiSelect` 中收到的方法将不会被调用, 这意味着, 你没有选择任何东西. 这也许会很有用, 不过取决于你的应用的行为.
+
+Type-safe Options
++++++++++++++++++
+
+如果你不想使用 `String` 在一个option中, 你可以使用 `multiSelectObj`. 这个情况下, options的例子依旧提供一个text name,但是值是一个class. 同时, 默认的list将是一个class实例的list:
+
+[source,scala]
+---------------------------------------------------------
+val options : List[(Item,String)] = inventory.map(i => (i -> i.name))
+val current = inventory.head :: Nil
+---------------------------------------------------------
+
+从数据中生成一个的方法是相似的, 但是请注意, 方法将收到一个 `Item` list:
+
+[source,scala]
+---------------------------------------------------------
+"#opts *" #> SHtml.multiSelectObj(options, current,
+  (xs: List[Item]) => println("Got "+xs) )
+---------------------------------------------------------
+
+Enumerations
+++++++++++++
+
+你可以使用 `multiSelectObj` 作为枚举:
+
+[source,scala]
+---------------------------------------------------------
+object Item extends Enumeration {
+  type Item = Value
+  val Coffee, Milk, Sugar = Value
+}
+
+import Item._
+
+val options : List[(Item,String)] =
+  Item.values.toList.map(i => (i -> i.toString))
+
+var current = Item.Coffee :: Nil
+
+def multi = "#opts *" #> SHtml.multiSelectObj[Item](options, current,
+  xs => println("Got "+xs) )
+---------------------------------------------------------
+
+See Also
+^^^^^^^^
+
+<<SelectOptionChange>> 介绍了如何触发一个服务端的行为, 当用户选择一个选项时.
+
+_Exploring Lift_, Chapter 6, "Forms in Lift", http://exploring.liftweb.net/[http://exploring.liftweb.net/].
+
+关于没有选项的Ticket: https://github.com/lift/framework/issues/1139[https://github.com/lift/framework/issues/1139]
+
+
+
+[[FileUpload]]
+文件上传
+~~~~~~~
+
+Problem
+^^^^^^^
+
+你想你的snippet允许用户上传文件.
+
+Solution
+^^^^^^^^
+
+使用 `FileParamHolder` 在你的snippet中, 然后解析文件信息, 当表格提交时.
+
+从设置一个表格为 "multipart=true" 开始:
+
+[source,html]
+---------------------------------------------------------
+<html>
+<head>
+  <title>File Upload</title>
+  <script id="jquery" src="/classpath/jquery.js" type="text/javascript"></script>
+  <script id="json" src="/classpath/json.js" type="text/javascript"></script>
+</head>
+<body>
+<form data-lift="FileUploadSnippet?form=post;multipart=true">
+   <label for="file">
+     Select a file: <input id="file"></input>
+   </label>
+   <input type="submit" value="Submit"></input>
+</form>
+</body>
+</html>
+---------------------------------------------------------
+
+通过以下code绑定snippet:
+
+[source,scala]
+---------------------------------------------------------
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml._
+import net.liftweb.http.FileParamHolder
+import net.liftweb.common.{Loggable, Full, Empty, Box}
+
+
+class FileUploadSnippet extends Loggable {
+
+  def render = {
+
+    var upload : Box[FileParamHolder] = Empty
+
+    def processForm() = upload match {
+      case Full(FileParamHolder(_, mimeType, fileName, file)) =>
+        logger.info("%s of type %s is %d bytes long" format (fileName, mimeType, file.length))
+
+      case _ => logger.warn("No file?")
+    }
+
+    "#file" #> fileUpload(f => upload = Full(f)) &
+      "type=submit" #> onSubmitUnit(processForm)
+  }
+}
+---------------------------------------------------------
+
+这段代码允许你, 在提交表格时, 访问 `Array[Byte]` 在 `processForm`方法中.
+
+
+Discussion
+^^^^^^^^^^
+
+HTTP包含一种编码为"multipart/form-data"用来提供上传二进制代码的功能.  `?form=post;multipart=true` 参数是告诉HTML使用这种编码, 当HTML生成时会有如下:
+
+[source,html]
+---------------------------------------------------------
+<form enctype="multipart/form-data" method="post" action="/fileupload">
+---------------------------------------------------------
+
+当浏览器提交表格时, Lift发现 "multipart/form-data" 编码然后从参数中解析文件.  这个参数时 `uploadedFiles` 在 `Req` 对象中, 比如说:
+
+[source, scala]
+---------------------------------------------------------
+val files : List[FileParamHolder] = S.request.map(_.uploadedFiles) openOr Nil
+---------------------------------------------------------
+
+然而, 当我们处理只有一个文件上传的时候, 使用 `SHtml.fileUpload` 绑定input的 `upload` 变量是一种简单的实现方法.  Lift会组织 `f => upload = Full(f)` 方法, 当一个文件被选择为上传文件的时候. 如果文件的长度是0, 方法将不会被调用.
+
+Lift的默认行为是将浏览器中的文件读入内存, 然后作为 `FileParamHolder`.  在这里我们使用匹配去找到 `FileParamHolder` 然后print出我们知道关于文件的信息.  我们忽略了第一个参数, 它是一个Lift自动生产的名字, 并且保存这mime类型, 原始的文件名和书都存在里面.
+
+你也许不能用这个方法上传一个很大的文件. 事实上, `LiftRules` 提供了一个上传文件大小的限制:
+
+* `LiftRules.maxMimeFileSize` -- 最大单一上传文件 (7MB by default).
+
+* `LiftRules.maxMimeSize` -- 最大多文件上传 (8MB by default)
+
+为什么使用这两个设置?  因为当表格提交的时候, 表格里会有很多个域.  比如说, 在这个例子中, 提交按钮的值将会作为一部分, 文件会是另一部分. 因此, 你需要限制文件大小, 但是允许别的域上传, 或者多文件上传.
+
+如果你超过了文件上传大小, 一个异常会从上传文件库中抛出. 你可以catch这个异常 <<CatchException>>:
+
+[source,scala]
+---------------------------------------------------------
+LiftRules.exceptionHandler.prepend {
+  case (_, _, x : FileUploadIOException) =>
+    ResponseWithReason(BadResponse(), "Unable to process file. Too large?")
+}
+---------------------------------------------------------
+
+请注意, 容器 (Jetty, Tomcat) 或者其他web容器 (Apache, NGINX)都有自己的上传文件大小限制.
+
+[[UploadToDisk]]
+上传文件缓存在内存中, 也许在一些情况下是可以的, 但是你也许想上传一个大点的文件, 并且让Lift以stream来处理它们.  Lift提供对这个需求的支持:
+
+[source,scala]
+---------------------------------------------------------
+LiftRules.handleMimeFile = OnDiskFileParamHolder.apply
+---------------------------------------------------------
+
+`handleMimeFile` 需要一个方法包含 name, mime type, filename 和 `InputStream` 然后返回一个 `FileParamHolder`.  默认的实现是使用 `InMemFileParamHolder`, 但是,当改成 `OnDiskFileParamHolder`时, 意味着Lift将会首先把文件写入硬盘. 你当然也可以自己写 `OnDiskFileParamHolder` 或者 `InMemFileParamHolder`.
+
+当使用 `OnDiskFileParamHolder`, 文件会被写入一个临时空间(`System.getProperty("java.io.tmpdir")`) 当你想删除时, 你可以随意删除它. 比如说, 我们的例子可以改成:
+
+[source,scala]
+---------------------------------------------------------
+def processForm() = upload match {
+
+  case Full(content : OnDiskFileParamHolder) =>
+    logger.info("File: "+content.localFile.getAbsolutePath)
+    val in: InputStream = content.fileStream
+    // ...do something with the stream here...
+    val wasDeleted_? = content.localFile.delete()
+
+  case _ => logger.warn("No file?")
+}
+---------------------------------------------------------
+
+请注意, `OnDiskFileParamHolder` 实现了 `FileParamHolder` 所以会匹配 `FileParamHolder`. 然而, 如果你想访问  `OnDiskFileParamHolder` 的 `file` 域, 你将会被文件缓存到内存中, 这将会和存到硬盘, 然后用stream访问冲突.
+
+如果你想看服务器端如何处理上传文件的, 你可以使用,  `LiftRules` 的一个hook:
+
+[source,scala]
+---------------------------------------------------------
+def progressPrinter(bytesRead: Long, contentLength: Long, fieldIndex: Int) {
+  println("Read %d of %d for %d" format (bytesRead, contentLength, fieldIndex))
+}
+
+LiftRules.progressListener = progressPrinter
+---------------------------------------------------------
+
+这是全部 multi-part 上传过程, 不知是一个文件被上传. 事实上,  `contentLength` 是未知的 (在这里例子中为 `-1`), 当时当全部完成的时候, 他将会被设置. 在这个例子中, 他会是文件的大小, 并且是提交按钮的值.  这也解释了 `fieldIndex`, 它是确定域被处理的顺序. 他将会是值 0 和 1 在这个例子中.
+
+
+See Also
+^^^^^^^^
+
+HTTP上传的文档 RFC 1867, _Form-based File Upload in HTML_:
+http://tools.ietf.org/html/rfc1867[http://tools.ietf.org/html/rfc1867]
+
+<<RestBinaryData>> REST服务的文件上传.
+
+<<AjaxFileUpload>> 使用JavaScript的Ajax文件上传, 包含了拖拽功能.
+
+
+
+

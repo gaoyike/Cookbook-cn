@@ -1,0 +1,881 @@
+[[deployment]]
+产品部署
+-------
+
+部署一个Lift应用. 这意味着, 不仅仅是打包一个程序, 然后把 _run mode_ 设置为 `production`. 这章中, 我们将介绍如果部署在各种的主机上.
+
+你也可以安装并且运行一个 _container_ 比如说 Tomcat 或者 Jetty 在你自己的服务器上. Containers 在这里有介绍 <<RunningYourApplication>>. 这章中, 我们将介绍如何安装, 设置, 启动, 通知和管理各种不同的服务器, 并且设置他们负载平衡, 或者其他前端. 这是一个很大的主题, 你可以在下边的链接中找到更多有用的信息:
+
+* The deployment section of the Lift Wiki at https://www.assembla.com/spaces/liftweb/wiki/Deployment[https://www.assembla.com/spaces/liftweb/wiki/Deployment].
+
+* Timothy Perrett (2012), _Lift in Action_, Chapter 15, "Deployment and scaling", Manning Publications Co.
+
+* Jason Brittain and Ian F. Darwin (2007), _Tomcat: The Definitive Guide_, O'Reilly Media, Inc.
+
+* Tanuj Khare (2012) _Apache Tomcat 7 Essentials_, Packt Publishing.
+
+
+[[CloudBees]]
+部署在CloudBees
+~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有CloudBees PaaS主机的帐户, 你想部署Lift应用到其中.
+
+Solution
+^^^^^^^^
+
+使用 SBT的`package` 打包一个应用为WAR文件, 它可以被直接部署在Lift中, 你可以使用CloudBees自带的SDK来部署它.
+
+在CloudBees的 "Grand Central" console中, 建立一个新的应用. 下面, 我们假设你的用户名为 _myaccount_ , 你的应用为 _myapp_.
+
+为了更好的perfermance, 你首先需要确定Lift是在production mode下.
+"production". 你可以使用以下命令:
+
+[source, bash]
+---------------------------------------------------------
+$ bees config:set -a myaccount/myapp run.mode=production
+---------------------------------------------------------
+
+这会把run mode 设置为 production 在你的应用"myaccount/myapp"上. 去掉 `-a` 将会设置在所有的应用上.
+
+CloudBees会记录这些设置, 所以你只需要设置一次.
+
+然后你就可以部署:
+
+[source, bash]
+---------------------------------------------------------------------
+$ sbt package
+...
+[info] Packaging /Users/richard/myapp/target/scala-2.9.1/myapp.war...
+...
+$ bees app:deploy -a myaccount/myapp ./target/scala-2.9.1/myapp.war
+---------------------------------------------------------------------
+
+这个命令会把你的WAR文件发到CloudBees上, 然后部署它.  当你使用 `app:deploy`完成后, 你的URL地址会显示出来.
+
+如果你改变了一个设置, 你需要重启应用. 部署一个应用可以帮助你查看改变的设置, 你也可以使用 `bees app:restart` 命令重启:
+
+[source, bash]
+---------------------------------------------------------
+$ bees app:restart -a myaccount/myapp
+---------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+如果你部署一个应用到很多个CloudBees实例中, 请注意, 默认情况下, CloudBess会轮询他们. 如果你想使用任何关于Lift state的功能, 你需要添加:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:update -a myaccount/myapp stickySession=true
+----------------------------------------------------------------
+
+如果你想使用comet, 它会正常工作, 但是默认情况下, CloudBees开启了_request buffering_. 这个设置允许了CloudBees做一些"聪明"的事情, 比如说 re-routing
+在一个簇中, 如果一个请求没有得到回复, 转向其他服务器. 但是, 一个request缓存会让使用长轮询的comet request更容易timeout. 为了避免它, 你需要运行一下命令:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:update -a myaccount/myapp disableProxyBuffering=true
+----------------------------------------------------------------
+
+运行了以上命令后, CloudBees会记录这个设置, 所以你只需要运行一次.
+
+最后, 你也许需要增加 _permanent generation_ 内存设置. 默认情况下, 一个应用有64M分配的内存. 为了增加到128M, 运行 `bees app:update` 命令:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:update -a myaccount/myapp jvmPermSize=128
+----------------------------------------------------------------
+
+命令 `bees app:info` 和 `bees config:list` 会返回你应用现在的设置.
+
+
+RDBMS 设置
+++++++++++
+
+如果你使用一个SQL数据库在你的应用, 你将需要设置 `src/main/webapp/WEB-INF/cloudbees-web.xml`. 比如:
+
+[source, xml]
+--------------------------------------------------------------------------
+<?xml version="1.0"?>
+<cloudbees-web-app xmlns="http://www.cloudbees.com/xml/webapp/1">
+
+<appid>myaccount/myapp</appid>
+
+<resource name="jdbc/mydb" auth="Container" type="javax.sql.DataSource">
+  <param name="username" value="dbuser" />
+  <param name="password" value="dbpassword" />
+  <param name="url" value="jdbc:cloudbees://mydb" />
+
+  <!-- For these connections settings, see:
+   http://commons.apache.org/dbcp/configuration.html
+  -->
+  <param name="maxActive" value="10" />
+  <param name="maxIdle" value="2" />
+  <param name="maxWait" value="15000" />
+  <param name="removeAbandoned" value="true" />
+  <param name="removeAbandonedTimeout" value="300" />
+  <param name="logAbandoned" value="true" />
+
+  <!-- Avoid idle timeouts -->
+  <param name="validationQuery" value="SELECT 1" />
+  <param name="testOnBorrow" value="true" />
+
+ </resource>
+
+</cloudbees-web-app>
+--------------------------------------------------------------------------
+
+上边的是JNDI数据库设置, 定义一个连接到数据库 "mydb". 它讲被使用在`Boot.scala`:
+
+[source, scala]
+------------------------------------------------------------
+DefaultConnectionIdentifier.jndiName = "jdbc/mydb"
+
+if (!DB.jndiJdbcConnAvailable_?) {
+  // set up alternative local database connection here
+}
+------------------------------------------------------------
+
+因为JNDI设置只是在 `cloudbees-web.xml`上, 它讲只在CloudBees环境下有用. 这意味着, 你可以另外设置本地的数据库, 当你想部署到CloudBees时.
+
+Host IP 和 Port Number
++++++++++++++++++++++++
+
+一般情况下, 你不需要知道你部署的实例的host name 和port number. CloudBees会自动路由request到相应的应用下. 然而, 在一些情况下, 特别是当你有很多个实例, 你需要知道请求是如何处理的. 比如说, 你想获得Amazon's Simple Notification Service (SNS)的信息, 你需要对每个实例分配一个直接的URL.
+
+为了获得public hostname, 你需要窗在一个HTTP请求到`http://instance-data/latest/meta-data/public-hostname`, 你可以在以下地方找到文档 https://developer.cloudbees.com/bin/view/Main/Finding+out+app+port+and+hostname[https://developer.cloudbees.com/bin/view/Main/Finding+out+app+port+and+hostname].  比如:
+
+[source, scala]
+------------------------------------------------------------
+import io.Source
+
+val beesPublicHostname : Box[String] = tryo {
+  Source.fromURL("http://instance-data/latest/meta-data/public-hostname").
+    getLines().toStream.head
+}
+------------------------------------------------------------
+
+它将返回一个 `Full` hostname 在CloudBees环境上, 但是在本地运行时会返回 `Failure`. 比如:
+
+[source, scala]
+------------------------------------------------------------
+Failure(instance-data,Full(java.net.UnknownHostException: instance-data),Empty)
+------------------------------------------------------------
+
+Port number可以在 `.genapps/ports` 文件夹下的一个文件找到:
+
+[source, scala]
+------------------------------------------------------------
+val beesPort : Option[Int] = {
+  val portsDir = new File(System.getenv("PWD"), ".genapp/ports")
+  for {
+    files <- Option(portsDir.list)
+    port <- files.flatMap(asInt).headOption
+  } yield port
+}
+------------------------------------------------------------
+
+方法 `java.io.File#list` 返回一个List, 里面是一个目录下的所有文件名, 但是会返回Null, 如果目录不存在, 或者有其他IO错误.  所以, 我们使用 `Option`, 把一个Null的值变成 `None`.
+
+在本地运行时, 会返回 `None`, 但是在CloudBees上, 你会看到 `Full[Int]` port number.
+
+你把两个放在一起会看到:
+
+[source, scala]
+------------------------------------------------------------
+import java.net.InetAddress
+
+val hostAndPort : String =
+  (beesPublicHostname openOr InetAddress.getLocalHost.getHostAddress) +
+  ":" + (beesPort getOrElse 8080).toString
+------------------------------------------------------------
+
+在本地运行时, `hostAndPort` 是 `192.168.1.60:8080`, 在CloudBees 上,为 `ec2-204-236-222-252.compute-1.amazonaws.com:8520`.
+
+Java Version
+++++++++++++
+
+现在CloudBees用的是JDK7, 但是你可以选择6, 7 和 8.
+为了改变默认的设置, 运行`bees config:set` 命令:
+
+[source, bash]
+------------------------------------------------------------
+$ bees config:set -a myaccount/myapp -Rjava_version=1.8
+------------------------------------------------------------
+
+通过使用 `-a myaccount/myapp` 将只是对特定的myapp应用进行设置. 命令 `bees config:set` 会设置一个相关的信息, 但是它将在下次重启的时候被应用.
+
+JVM也可以通过重新部署一个应用, 或者使用以下命令改变:
+
+[source, bash]
+------------------------------------------------------------
+$ bees app:deploy -a myaccount/myapp sample.war  -Rjava_version=1.6
+$ bees app:update -a myaccount/myapp -Rjava_version=1.7
+------------------------------------------------------------
+
+为了确定现在运行的JVM版本, 使用`bees config:list` 命令:
+
+[source, bash]
+------------------------------------------------------------
+$ bees config:list -a myaccount/myapp
+Runtime Parameters:
+  java_version=1.6
+------------------------------------------------------------
+
+
+Container Version
++++++++++++++++++
+
+CloudBees提供了很多容器: Tomcat 6.0.32 (the default), Tomcat 7, JBoss 7.02, JBoss 7.1 和 GlassFish 3.
+
+因为CloudBees使用不同的文件设置在不同的容器上, 所以你的应用必须重新部署. 我们需要使用 `bees app:deploy` 命令, 以下例子使用了Tomcat 7:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:deploy -t tomcat7 -a myaccount/myapp sample.war
+----------------------------------------------------------------
+
+JVM和container命令可以使用一行 `bees app:deploy`命令:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:deploy -t tomcat -a myaccount/myapp sample.war -Rjava_version=1.6
+----------------------------------------------------------------
+
+它将部署 `sample.war` 到 "myapp" 应用在帐户 "myaccount" 使用 Tomcat 6.0.32  和 JDK 6.
+
+为了决定部署在哪个容器上, 使用 `bees app:info`:
+
+[source, bash]
+----------------------------------------------------------------
+$ bees app:info -a myaccount/myapp
+Application     : myaccount/myapp
+Title           : myapp
+Created         : Wed Mar 20 11:02:40 EST 2013
+Status          : active
+URL             : myapp.myaccount.cloudbees.net
+clusterSize     : 1
+container       : java_free
+containerType   : tomcat
+idleTimeout     : 21600
+maxMemory       : 256
+proxyBuffering  : false
+securityMode    : PUBLIC
+serverPool      : stax-global (Stax Global Pool)
+----------------------------------------------------------------
+
+
+
+ClickStarts
++++++++++++
+
+ClickStart 应用是一个模板, 可以让你快速的取得, 自动生成应用, 运行在CloudBees上. Lift的ClickStart建立了一个似有的Git在CloudBees上包含了Lift 2.4应用, 使用MySQL database, 建立了一个Maven-based Jenkins build, 然后部署应用. 你需要的只是提供一个名字(不能使用空格).
+
+为了访问这个私有的Git, 你需要上传一个SSH key. 你可以在CloudBees中的帐户设置里的"My Keys"中设置.
+
+当你做出一些代码改变的时候, 它将自动的修改CloudBees上的部署.
+
+如果你上所述的一切都是你想用的技术, ClickStart 是你最好的选择. 或者, 它给你一个start point, 你可以做出修改; 或者你使用一个Lift模板在CloudBees上 https://github.com/CloudBees-community/lift_template[https://github.com/CloudBees-community/lift_template].
+
+
+See Also
+^^^^^^^^
+
+CloudBees SDK 提供了一个命令行程序, 可以修改控制应用. 你可以在以下地址找到https://wiki.cloudbees.com/bin/view/RUN/BeesSDK[https://wiki.cloudbees.com/bin/view/RUN/BeesSDK].
+
+The CloudBees developer portal (https://developer.cloudbees.com[https://developer.cloudbees.com])contains a "Resources" section which provides details of the CloudBees services.
+
+The JVM PermGen settings for CloudBees are described at https://wiki.cloudbees.com/bin/view/RUN/JVM+PermGen+Space[https://wiki.cloudbees.com/bin/view/RUN/JVM+PermGen+Space], and settings for which JVM is used can be found at https://developer.cloudbees.com/bin/view/RUN/JVMVersion[https://developer.cloudbees.com/bin/view/RUN/JVMVersion]. For information about the containers, see: https://developer.cloudbees.com/bin/view/RUN/ClickStack[https://developer.cloudbees.com/bin/view/RUN/ClickStack].
+
+一个插件可以让SBT自动部署: https://github.com/timperrett/sbt-cloudbees-plugin[https://github.com/timperrett/sbt-cloudbees-plugin].
+
+//////////////////////////////////////////
+
+
+
+
+
+
+
+
+
+//////////////////////////////////////////
+
+[[Beanstalk]]
+部署到 Amazon Elastic Beanstalk
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想你的Lift应用部署到Amazon Web Services (AWS) Elastic Beanstalk.
+
+
+Solution
+^^^^^^^^
+
+建立一个新的Tomcat7 _environment_, 使用 SBT 打包你的Lift应用成WAR文件, 然后部署到你的环境上.
+
+为了建立一个新的环境, 访问 AWS console, 找到 Elastic Beanstalk 并且选择 "Apache Tomcat 7" 作为你的环境. 它将自动的建立一个 Beanstalk 应用. 它将占用一段时间, 但是最后将会返回 "Successfully running version Sample Application". 你将会看到你的URL(类似于 `http://default-environment-nsdmixm7ja.elasticbeanstalk.com`), 打开URL, 你会看到默认的Amazon应用.
+
+打包你的应用:
+
+[source, bash]
+-------------------------
+$ sbt package
+-------------------------
+
+它将输出一个WAR文件到`target`文件夹, 你需要使用AWS Beanstalk web console 部署它(see <<ConsoleImage>>),选择 "Versions" 在 "Elastic Beanstalk Application Details" 里, 然后点击"Upload new version" 按钮. 你将会看到一个写着版本的对话框, 点击 "Choose file" 来选择你刚建立的WAR文件. 你可以选择上传后直接部署, 或者等待你想部署的时候, 点击`Deploy`.
+
+Beanstalk console 会显示 "Environment updating..." 然后过一会儿会显示 "Successfully running".  你的Lift应用现在运行在Beanstalk.
+
+最后的一步是启动Lift的production运行模式. 在AWS Beanstalk web console中, 点击 "Edit Configuration" 链接. 一个对话框将会显示, 在 "Container" tab 下添加 `-Drun.mode=production` 到 "JVM Command Line Options" 然后点击 "Apply Changes" 重新部署你的应用.
+
+[[ConsoleImage]]
+.AWS Console, with Elastic Beanstalk service selected.
+image::images/beanstalkconsole.png[width=640]
+
+Discussion
+^^^^^^^^^^
+
+Elastic Beanstalk 提供了一个预先构建的软件架构, 在这个例子中是: Linux, Tomcat 7, a 64 bit "t1.micro" EC2 instance, load balancing, 和 一个 S3 bucket. 这是它的 _环境_ 和它默认的设置.  Beanstalk也提供了一个简单的部署Lift应用的方法. 就像我们在这章中看到的一样, 你上传一个应用打包文件(WAR file)到 Beanstalk 并且部署到以上环境中.
+
+就像使用其他云服务一样, 请不要把文件储存在本地. 这样可以避免在重新启动, 或者程序突然停止的时候造成数据丢失. 在你的Beanstalk应用中, 你有一个文件系统一个写入文件, 但是当镜像重启的时候, 文件将丢失. 你可以使用一个persistent的本地存储方法, 比如说使用 Amazon Elastic Block Storage, 不过使用它是和这个平台本身的环境不符合.
+
+Log文件是写入到本地的. 为了访问它们,在AWS控制台中 , 选择你的环境, 在 "Logs" tab下 点击 "Snapshot" 按钮. 它会对Log做一个备份, 然后存储在S3 bucket, 并且返回一个可以访问他们的链接. 这是一个单一的文件, 里面显示了所有的Log文件, 并且 `catalina.out` 将是你应用的输出.  如果你想保留他们, 你可以设置你的环境, 每个小时都把Log存储到S3, 在"Container" tab 下点击 "Edit Configuration".
+
+Lift应用的WAR文件和S3 bucket存储在同一个地方. 在AWS控制台, 你需要找到在S3页面下, 列出的名为类似于 `elasticbeanstalk-us-east-1-5989673916964`的选项. 你会发现, 每次你上传的WAR文件, 会被自动的加一个prefix. 如果你需要知道这些文件在S3中的不同, 所以最好的方法是添加 `version` 值到你的 `build.sbt` 文件中.
+
+多实例
++++++
+
+Beanstalks 默认开启了 _auto scaling_ . 它会首先使用一个你的Lift应用的实例, 但是当你的应用负载增加后, 最多四个实例将被使用.
+
+如果你创造了一个有状态的Lift应用, 你需要开启sticky sessions 在 "Load Balancer" tab, 在 environment configuration中. 它是一个checkbox, 名为 "Enable Session Stickiness"--它非常容易被忽视, 但是当你使用滚轮滚动的时候, 你会看到更多.
+
+
+使用数据库
++++++++++
+
+使用Beanstalk的数据库方法, 和使用Lift的一样. 然而, Beanstalk试着让你更简单的使用 Amazon的关系型数据库服务(RDS). 当你在创建Beanstalk环境, 或者在修改选项的时候, 你可以添加一个RDS实例, 它将是一个Oracle, SQL-Server 或者 MySQL 数据库.
+
+其中的, MySQL选项将会创建一个 MySQL 5.5 InnoDB 数据库. 数据库可以通过Beanstalk访问, 但是不可以通过其他地方访问. 如果你想改变它, 修改AWS中关于数据库的安全设置. 比如说, 你可以允许访问数据库通过你的IP.
+
+当你的应用运行在相关的RDS实例上的时候, 你有JVM系统的信息, 它们是database name, host, port, user 和 password.  你可以把他们放在 `Boot.scala`:
+
+[source,scala]
+-------------------------------------------
+Class.forName("com.mysql.jdbc.Driver")
+
+val connection = for {
+  host <- Box !! System.getProperty("RDS_HOSTNAME")
+  port <- Box !! System.getProperty("RDS_PORT")
+  db   <- Box !! System.getProperty("RDS_DB_NAME")
+  user <- Box !! System.getProperty("RDS_USERNAME")
+  pass <- Box !! System.getProperty("RDS_PASSWORD")
+} yield DriverManager.getConnection(
+    "jdbc:mysql://%s:%s/%s" format (host,port,db),
+    user, pass)
+-------------------------------------------
+
+它将返回一个 `Box[Connection]`, 如果它是`Full`, 你将可以使用它在 `SquerylRecord.initWithSquerylSession` (请见 <<Squeryl>>).
+
+或者, 你想通过提供一个默认的设置, 确保一个连接的使用, 你可以这样做:
+
+[source,scala]
+-------------------------------------------
+Class.forName("com.mysql.jdbc.Driver")
+
+val connection = {
+  val host = System.getProperty("RDS_HOSTNAME", "localhost")
+  val port = System.getProperty("RDS_PORT", "3306")
+  val db = System.getProperty("RDS_DB_NAME", "db")
+  val user = System.getProperty("RDS_USERNAME", "sa")
+  val pass = System.getProperty("RDS_PASSWORD", "")
+
+  DriverManager.getConnection(
+    "jdbc:mysql://%s:%s/%s" format (host,port,db),
+    user, pass)
+}
+-------------------------------------------
+
+
+See Also
+^^^^^^^^
+
+Amazon提供了一个包含屏幕截图的指南, 它提供了如何创建Beanstalk应用. 地址是: http://docs.amazonwebservices.com/elasticbeanstalk/latest/dg/GettingStarted.Walkthrough.html[http://docs.amazonwebservices.com/elasticbeanstalk/latest/dg/GettingStarted.Walkthrough.html].
+
+_Elastic Beanstalk_, by van Villet _et al_ (2011, O'Reilly Media, Inc) 介绍了详细的Beanstalk设置, 如何在Eclipse上使用, 开启集成模式, 如何hack实例, 比如说使用一个NGINX作为前端在Beanstalk上.
+
+Amazon的文档, "Configuring Databases with AWS Elastic Beanstalk" 介绍了设置数据库的信息: http://docs.amazonwebservices.com/elasticbeanstalk/latest/dg/using-features.managing.db.html[http://docs.amazonwebservices.com/elasticbeanstalk/latest/dg/using-features.managing.db.html].
+
+
+//////////////////////////////////////////
+
+
+
+
+
+
+
+
+//////////////////////////////////////////
+
+[[HerokuDeployment]]
+部署到Heroku
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想部署你的Lift应用到你的Heroku云平台上.
+
+Solution
+^^^^^^^^
+
+把你的Lift应用打包成一个WAR文件, 然后通过Heroku的部署插件, 部署在云平台上. 它将默认把你的应用运行在Tomcat 7上. 任何人都可以通过这种方法部署一个应用, 但是Heroku只对Java企业用户提供服务.
+
+这章中, 我们带你了解三个不同的步骤: 一次性设置, 部署WAR文件, 设置你的Lift应用.
+
+如果你没有Heroku, 下载并且安装Heroku的命令行工具, 然后登录你的账户, 上传一个SSH key:
+
+---------------------------
+$ heroku login
+Enter your Heroku credentials.
+Email: you@example.org
+Password (typing will be hidden):
+Found the following SSH public keys:
+1) github.pub
+2) id_rsa.pub
+Which would you like to use with your Heroku account? 2
+Uploading SSH public key ~/.ssh/id_rsa.pub... done
+Authentication successful.
+---------------------------
+
+安装部署插件:
+
+---------------------------
+$ heroku plugins:install https://github.com/heroku/heroku-deploy
+Installing heroku-deploy... done
+---------------------------
+
+当这个一次性设置完成后, 你可以在Heroku上, 建立一个应用. 这里, 我们没有一个特定的名字, 我们使用 `glacial-waters-6292` 在这章中:
+
+---------------------------
+$ heroku create
+Creating glacial-waters-6292... done, stack is cedar
+http://glacial-waters-6292.herokuapp.com/ | git@heroku.com:glacial-waters-6292.git
+---------------------------
+
+在部署前, 我们需要设置Lift的运行模式为production. 你需要使用`config:set` 命令. 首先, 检查现在的 `JAVA_OPTS`设置, 并且添加`-Drun.mode=production`:
+
+---------------------------
+$ heroku config:get JAVA_OPTS --app glacial-waters-6292
+-Xmx384m -Xss512k -XX:+UseCompressedOops
+
+$ heroku config:set JAVA_OPTS="-Drun.mode=production -Xmx384m -Xss512k
+  -XX:+UseCompressedOops" --app glacial-waters-6292
+---------------------------
+
+我们可以通过把应用打包, 部署到Heroku上, 使用 `deploy:war` 命令:
+
+[source, bash]
+---------------------------
+$ sbt package
+....
+[info] Packaging target/scala-2.9.1/myapp-0.0.1.war ...
+....
+$ heroku deploy:war --war target/scala-2.9.1/myapp-0.0.1.war
+  --app glacial-waters-6292
+Uploading target/scala-2.9.1/myapp-0.0.1.war............done
+Deploying to glacial-waters-6292.........done
+Created release v6
+---------------------------
+
+现在, 你的Lift应用已经运行在Heroku上了.
+
+
+Discussion
+^^^^^^^^^^
+
+这里有一些关于部署Lift应用到Heroku上的提示. 首先, 请注意, Heroku不支持session affinity.这意味着, 如果你部署到很多的_dynos_ (Heroku对实例的术语), 他们将没有关于如何分配的信息. 结果是, 你将无法使用Lift的stateful的功能. 你需要看 (<<RunningStateless>>, 它解释了如何关闭这个功能).
+
+其次, 如果你使用Lift的comet功能, 这里你需要有一点的修改在`Boot.scala`文件中:
+
+[source, scala]
+---------------------------
+LiftRules.cometRequestTimeout = Full(25)
+---------------------------
+
+这个设置是控制Lift等待多长时间来测试一个comet连接. 默认的Lift等待为120秒, 在这里我设置25秒是因为, Heroku将会在30秒后自动挂断连接. 尽管Lift将会恢复这个连接, 但是你将会看到一段时间的延迟.
+
+第三个重要提示是, dyno将会在每天都自动重启. 并且, 如果你的应用在一个小时中没有任何动作, 它将会被停止. 你可以通过看Log来知道现在的状态:
+
+[source, bash]
+---------------------------
+$ heroku logs -t --app glacial-waters-6292
+...
+2012-12-31T11:31:39+00:00 heroku[web.1]: Idling
+2012-12-31T11:31:41+00:00 heroku[web.1]: Stopping all processes with SIGTERM
+2012-12-31T11:31:43+00:00 heroku[web.1]: Process exited with status 143
+2012-12-31T11:31:43+00:00 heroku[web.1]: State changed from up to down
+---------------------------
+
+任何人的访问都可以阻止你Lift应用的停止.
+
+请注意, 应用停止为`SIGTERM`. 这是一个Unix发送给一个线程的信号, 在这里JVM将会停止.  不幸的是, tomcat应用在Heroku, 将不会使用这个信号来停止Lift应用 . 这也许对你有点以为, 但是为了让你的应用和JVM的停止同步, 你需要一个hook挂在JVM上来检测JVM.
+
+比如说, 你可以添加以下信息到 `Boot.scala`:
+
+[source, scala]
+---------------------------
+Runtime.getRuntime().addShutdownHook(new Thread {
+  override def run() {
+    println("Shutdown hook being called")
+    // Do useful clean up here
+  }
+})
+---------------------------
+
+不过别让Lift做太多的事情.  Heroku当收到 `SIGTERM`后, 只有10秒的时间, 然后将会停止JVM.
+
+一个很好的方法是使用Lift的unload hook (请看 <<ShutdownHooks>>) 然后在Heroku收到停止信息时, 使用hook:
+
+[source, scala]
+---------------------------
+Runtime.getRuntime().addShutdownHook(new Thread {
+  override def run() {
+    LiftRules.unloadHooks.toList.foreach{ f => tryo { f() } }
+  }
+})
+---------------------------
+
+这种对 `SIGTERM` 的处理, 也许是一个惊喜, 但是如果我们了解应用是如何在Heroku上运行的, 你将会对这种方法更清楚的了解.  一个dyno是一个分配的资源(512m内存)并且运行一个命令运行.这个命令是一个Java的线程, 为"webapp runner" 包. 你可以分两步的看它. 首先, 如果你看你的dyno, 你会看到你的WAR文件和一个JAR文件:
+
+[source, bash]
+---------------------------
+$ heroku run bash --app glacial-waters-6292
+Running `bash` attached to terminal... up, run.8802
+~ $ ls
+Procfile  myapp-0.0.1.war  webapp-runner-7.0.29.3.jar
+---------------------------
+
+然后, 如果你查看dyno是如何运行的:
+
+[source, bash]
+---------------------------
+$ heroku ps --app glacial-waters-6292
+=== web: `${PRE_JAVA}java ${JAVA_OPTS} -jar webapp-runner-7.0.29.3.jar
+ --port ${PORT} ${WEBAPP_RUNNER_OPTS} myapp-0.0.1.war`
+web.1: up 2013/01/01 22:37:35 (~ 31s ago)
+---------------------------
+
+这里, 我们看到一个Java线程执行了一个JAR文件 `webapp-runner-7.0.29.3.jar`, 并且它接受我们的WAR文件作为参数. 它不是一个tomcat的 `catalina.sh`脚本, 但是它是一个运行脚本: https://github.com/jsimone/webapp-runner[https://github.com/jsimone/webapp-runner]. 它没有一个对 `SIGTERM` 信号的处理方式, 所以我们必须要自己定义, 在关闭的时候, 如何处理运行的资源.
+
+以上的意思是, 如果你想运行Lift应用通过一个不同的方法, 你可以, 但是你需要提供一个适合Lift的container(Jetty, Tomcat), 并且提供一个`main`方法. Heroku使用的, 使我们称为的 "无容器部署".
+
+如果你不是Heroku的Java企业级用户, 并且你对现有的部署插件不适应, 你需要使用以下方法: 提供一个 `main` 方法运行你的应用, 然后监听访问的连接. 请看 _See Also_ .
+
+
+在Heroku中访问数据库
+++++++++++++++++++
+
+Heroku没有任何的限制, 它们尝试让用户使用他们的PostgreSQL更简单. 所以当你建立应用的时候, 他们会附加一个数据库.
+
+
+你可以通过以下命令查看 `pg`:
+
+[source, bash]
+---------------------------
+$ heroku pg --app glacial-waters-6292
+=== HEROKU_POSTGRESQL_BLACK_URL (DATABASE_URL)
+Plan:        Dev
+Status:      available
+Connections: 0
+PG Version:  9.1.6
+Created:     2012-12-31 10:02 UTC
+Data Size:   5.9 MB
+Tables:      0
+Rows:        0/10000 (In compliance)
+Fork/Follow: Unsupported
+---------------------------
+
+数据库的URL是 `DATABASE_URL` 的值, 它类似如下:
+
+---------------------------
+postgres://gghetjutddgr:RNC_lINakkk899HHYEFUppwG@ec2-54-243-230-119.compute-1.
+ amazonaws.com:5432/d44nsahps11hda
+---------------------------
+
+这个URL包含一个 user name, password, host 和 database name, 他们是通过JDBC来使用.  为了实现它, 你需要添加以下代码到 `Boot.scala`:
+
+[source, scala]
+---------------------------
+ Box !! System.getenv("DATABASE_URL") match {
+  case Full(url) => initHerokuDb(url)
+  case _ => // configure local database perhaps
+}
+
+def initHerokuDb(dbInfo: String) {
+  Class.forName("org.postgresql.Driver")
+
+  // Extract credentials from Heroku database URL:
+  val dbUri = new URI(dbInfo)
+  val Array(user, pass) = dbUri.getUserInfo.split(":")
+
+  // Construct JDBC connection string from the URI:
+  def connection = DriverManager.getConnection(
+    "jdbc:postgresql://" + dbUri.getHost + ':' + dbUri.getPort +
+      dbUri.getPath, user, pass)
+
+  SquerylRecord.initWithSquerylSession(
+    Session.create(connection, new PostgreSqlAdapter))
+
+  S.addAround(new LoanWrapper {
+    override def apply[T](f: => T): T = inTransaction { f }
+  })
+}
+---------------------------
+
+这里, 我们测试的是现在的 `DATABASE_URL` 环境变量, 它代表了我们正在使用Heroku. 它的代码可以在以下关于Squeryl的文章中找到(described in <<Squeryl>>).
+
+为了运行 `build.sbt`, 我们需要一个正确的关于Record 和 PostgresSQL的设置:
+
+[source, scala]
+---------------------------
+...
+"postgresql" % "postgresql" % "9.1-901.jdbc4",
+"net.liftweb" %% "lift-record" % liftVersion,
+"net.liftweb" %% "lift-squeryl-record" % liftVersion,
+...
+---------------------------
+
+通过使用它, 你的Lift应用可以使用Heroku的数据库, 并且你可以使用shell访问它, 比如说:
+
+[source, bash]
+---------------------------
+$ pg:psql --app glacial-waters-6292
+psql (9.1.4, server 9.1.6)
+SSL connection (cipher: DHE-RSA-AES256-SHA, bits: 256)
+Type "help" for help.
+
+d44nsahps11hda=> \d
+No relations found.
+d44nsahps11hda=> \q
+$
+---------------------------
+
+为了在Heroku环境外, 使用JDBC工具, 你需要给SSL提供一个参数, 如下:
+
+---------------------------
+jdbc:postgresql://ec2-54-243-230-119.compute-1.amazonaws.com:5432/d44nsahps11hda?
+  username=gghetjutddgr&password=RNC_lINakkk899HHYEFUppwG&ssl=true&sslfactory=
+  org.postgresql.ssl.NonValidatingFactory
+---------------------------
+
+
+See Also
+^^^^^^^^
+
+Scala和Java的关于Heroku的文章可以帮助你理解这章的内容: https://devcenter.heroku.com/categories/scala[https://devcenter.heroku.com/categories/scala] and https://devcenter.heroku.com/categories/java[https://devcenter.heroku.com/categories/java].
+
+_Dynos 和 the Dyno Manifold_ 在以下地址有介绍: https://devcenter.heroku.com/articles/dynos[https://devcenter.heroku.com/articles/dynos].
+
+JVM shutdown hook在以下地址有介绍: http://docs.oracle.com/javase/7/docs/api/java/lang/Runtime.html[http://docs.oracle.com/javase/7/docs/api/java/lang/Runtime.html].
+
+Heroku的关于使用"无容器部署", 在以下地址有介绍: https://devcenter.heroku.com/articles/java-webapp-runner[https://devcenter.heroku.com/articles/java-webapp-runner].  There are also a template SBT project from Matthew Henderson that includes a `JettyLauncher` class: https://github.com/ghostm/lift_blank_heroku[https://github.com/ghostm/lift_blank_heroku].
+
+Heroku如何处理comet长轮询在这里有介绍: https://devcenter.heroku.com/articles/request-timeout[https://devcenter.heroku.com/articles/request-timeout].
+
+/////////////////////////////////////////
+
+
+
+
+
+
+
+
+//////////////////////////////////////////
+
+[[DistributedComet]]
+不同服务器上的分布式Comet
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你正在使用Lift的Comet, 并且你想在多个服务器上做分布式服务, 来增加冗余或者增加服务器负载能力.
+
+Solution
+^^^^^^^^
+
+使用 _publish/subscribe_ (pubsub)模型连接每一个服务器到一个 _topic_ 并且指引comet信息发送到指定的topic, 让每一个运行你应用的服务器都能收到信息.
+
+有很多不同的技术你可以达到这个效果, 比如说 databases, message systems, actor systems. 在这个例子中, 我们将使用RabitMQ消息队列,但是这里有使用CouchDB和Amazon Simple Notification Service的例子, 可以在 _See Also_ 里找到.
+
+抛去技术, 我们使用的方法是 <<DistributedCometDiagram>>. 一个comet的事件在Lift应用上发生, 并且发送到服务器做重定向. 这个服务的责任是 (标为 "topic" 在例子中)确保所有的服务器都收到Lift应用发的信息, 然后可以被Lift处理.
+
+[[DistributedCometDiagram]]
+.Comet事件根据topic分配给服务器的, 如下图:.
+image::images/topic.png[width=640]
+
+第一步是下载, 并且安装RabbitMQ: http://rabbitmq.com/[http://rabbitmq.com/]. 然后运行:
+
+-----------------------------------------
+$ ./sbin/rabbitmq-server -detatched
+-----------------------------------------
+
+这个命令会产生很多信息, 最后你会看到: "broker running".
+
+这个Lift应用我们曾经用来展示 pubsub 模式, 它是一个聊天室应用, 介绍在 _Simply Lift_.
+第一步需要改进的是我们需要让Lift可以和RabbitMQ对话. 我们需要在 `libraryDependencies` 中添加一句, 它在 `build.sbt`文件中:
+
+[source, scala]
+-----------------------------------------
+"net.liftmodules" %% "amqp" % (liftVersion + "-1.1"),
+-----------------------------------------
+
+AMQP 是 Advanced Message Queuing Protocol 的简写, RabbitMQ使用这个协议. AMQP模型提供了一个抽象的actor用来接受和发送信息, 我们通过以下两个方法实现这个接口 `RemoteSend` 和 `RemoteReceiver`:
+
+[source, scala]
+-----------------------------------------
+package code.comet
+
+import net.liftmodules.amqp._
+import com.rabbitmq.client._
+
+object Rabbit {
+
+  val factory = new ConnectionFactory(new ConnectionParameters)
+
+  val host = "127.0.0.1"
+  val port = 5672
+  val exchange = "lift.chat"
+  val routing = ""
+  val durable = true
+  val noAck = false
+
+  object RemoteSend extends AMQPSender[String](factory, host, port,
+    exchange, routing) {
+    def configure(channel: Channel) =
+      channel.exchangeDeclare(exchange, "fanout", durable)
+  }
+
+  object RemoteReceiver extends AMQPDispatcher[String](factory, host, port) {
+    def configure(channel: Channel) = {
+      channel.exchangeDeclare(exchange, "fanout", durable)
+      val queueName = channel.queueDeclare().getQueue()
+      channel.queueBind(queueName, exchange, routing)
+      channel.basicConsume(queueName, noAck,
+        new SerializedConsumer(channel, this))
+    }
+  }
+
+}
+-----------------------------------------
+
+这段代码展示了`RemoteSend` 和 `RemoteReceiver` actors 序列化一个 `String` 值通过RabbitMQ. 下面的 _Discussion_ 中有更多解释.
+
+为了让comet信息能通过RabbitMQ, 我们需要在`Boot.scala`中做两个改变:
+
+[source, scala]
+-----------------------------------------
+RemoteReceiver ! AMQPAddListener(ChatServer)
+-----------------------------------------
+
+这段代码把 `ChatServer` 设置为 `RemoteReciver`的一个AMQP消息队列的监听器.
+
+最好的改变是对 `ChatServer` 自己的. `ChatServer`的作用是接收一个`String` 信息从一个客户端然后更新所有comet的信息:
+
+[source, scala]
+-----------------------------------------
+override def lowPriority = {
+  case s : String => msgs :+= s; updateListeners()
+}
+-----------------------------------------
+
+这个改变是为了把所有的类型为 `String` 的信息加载到RabbitMQ中, 然后使用RabbitMQ分配信息:
+
+[source, scala]
+-----------------------------------------
+override def lowPriority = {
+  case AMQPMessage(s: String) => msgs :+= s; updateListeners()
+  case s: String => RemoteSend ! AMQPMessage(s)
+}
+-----------------------------------------
+
+这个改变意味着我们所有的comet聊天信息都会先加载进RabbitMQ的队列中, 然后分配给所有运行RabbitMQ实例的服务器端.
+
+Discussion
+^^^^^^^^^^
+
+为了在本地测试RabbitMQ, 你需要创建多于一个实例的Lift应用. 这时候, 你需要打开SBT, 然后运行另一个控制台, 然后把Lift应用运行在另一个端口上:
+
+-----------------------------------------
+$ sbt
+...
+> set port in container.Configuration := 9090
+[info] Reapplying settings...
+[info] Set current project to RabbitMQ Chat (in build file:rabbitmq_chat/)
+> container:start
+-----------------------------------------
+
+你可以在 `http://127.0.0.1:8080` 看到一个实例, 在 `http://127.0.0.1:9090` 看到另一个.
+
+在上面的例子中, 你会看到 `AMQPSender[T]` 和 `AMQPDispatcher[T]` 这两个方法非常重要, 并且我们对他们进行了一些设置. 对于 `RemoteSend` 我们设置了 `AMQPSender` 与一个类型为`String` 信息一起工作, 并且设置了一个 _exchange_ 名为 "lift.chat". 在RabbitMQ中这个exchange就是我们发送信息的目的地, 信息到达exchange了后, 会分配到每个节点. 在这个例子中, exchange为 _fanout_ (顾名思义), 每一个节点都会收到一个信息的副本. 这就是我们希望看到的, 每一个comet客户端都收到一份信息.
+
+`RemoteReceiver` 也被用来接受 `String` 信息, 尽管对它的设置有些长. 在这里, 就像我们使用exchange一样, 我们声明了一个 _temporary queue_ 对于我们的Lift实例.  这个queue接受我们发动的信息, 但是这里, 每一个接收者都有自己的queue. Fanout exchange将确保每一个接收者都收到信息, 并且加载到他们自己的queue里. Queue有一个随机的名字, 并且在关闭应用后消失.
+
+`RemoteReceiver` 的最后一部分是定义我们如何处理这些信息. 默认的 `RemoteSend` 的行为是序列化object, 所以我们最小化这部分通过使用AMQP模型中的 `SerializedConsumer` 方法.
+
+为了看到默认的RabbitMQ的行为, 比较好的方法是使用RabbitMQ的管理页面.  在你安装目录下:
+
+-----------------------------------------
+$ ./sbin/rabbitmq-plugins enable rabbitmq_management
+-----------------------------------------
+
+你可以看到一个管理的网络页面在 `http://127.0.0.1:15672/` 然后login.  默认的用户名和密码均为"guest".
+
+如果你觉得每次都在开发的时候, 都需要运行一次RabbitMQ很麻烦. 你可以简单的不初始化服务在 `Boot.scala`:
+
+[source, scala]
+-----------------------------------------
+if (Props.productionMode)
+  RemoteReceiver ! AMQPAddListener(ChatServer)
+-----------------------------------------
+
+然后在聊天服务器上, 只发送给本地客户端:
+
+[source, scala]
+-----------------------------------------
+override def lowPriority = {
+  case AMQPMessage(s: String) => msgs :+= s; updateListeners()
+  case s: String =>
+    if (Props.productionMode) RemoteSend ! AMQPMessage(s)
+    else { msgs :+= s; updateListeners() }
+  }
+-----------------------------------------
+
+请注意 `Props.productionMode` 为 `true` 当你使用运行模式为 `Production` , `Staging` 和 `Pilot`.
+
+
+See Also
+^^^^^^^^
+
+Lift Chat 例子在_Simply Lift_ 有介绍: http://simply.liftweb.net/[http://simply.liftweb.net/]. 这章的代码可以在以下地址找到: https://github.com/LiftCookbook/rabbitmq_chat[https://github.com/LiftCookbook/rabbitmq_chat].
+
+The Lift AMQP module is: https://github.com/liftmodules/amqp[https://github.com/liftmodules/amqp].
+
+如果你想学更多关于RabbitMQ, 请看官方教程 (http://www.rabbitmq.com/tutorials/tutorial-five-java.html[http://www.rabbitmq.com/tutorials/tutorial-five-java.html]) or Alvaro Videla and Jason J.W. Williams (2012), _RabbitMQ in Action: Distributed Messaging for Everyone_, Manning Publications.
+
+Diego Medina实现了一个分布式的comet解决方案, 使用了CouchDB, 在以下地址有介绍:https://fmpwizard.telegr.am/blog/distributed-comet-chat-lift[https://fmpwizard.telegr.am/blog/distributed-comet-chat-lift].
+
+Amazon's Simple Notification Service (SNS) is a fanout facility so can also be used to implement this pattern. You can find a Lift module for SNS at https://github.com/SpiralArm/liftmodules-aws-sns[https://github.com/SpiralArm/liftmodules-aws-sns].
+
+
+

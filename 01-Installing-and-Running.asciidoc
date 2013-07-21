@@ -1,0 +1,740 @@
+[[InstallAndRunning]]
+安装和运行
+--------
+
+这种主要覆盖了关于如何开始开发Lift的相关问题: 其中包括, 运行一个Lift应用和设置一个编程环境. 你将会找到关于生产部署在 <<deployment>>.
+
+[[DownloadAndRun]]
+下载和运行Lift
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想安装和运行Lift在你的计算机.
+
+Solution
+^^^^^^^^
+
+安装和运行Lift的唯一前提是你需要有Java 1.5或者更新的版本在你的计算机上安装. 你可以找到关于如何安装Java在http://java.com/[http://java.com/].
+
+你可以测试是否正确安装Java, 或检查Java的版本, 运行以下命令:
+
+----------------------------------------------------------------
+$ java -version
+java version "1.7.0_13"
+Java(TM) SE Runtime Environment (build 1.7.0_13-b20)
+Java HotSpot(TM) 64-Bit Server VM (build 23.7-b01, mixed mode)
+----------------------------------------------------------------
+
+当你安装好Java后, 通过运行以下命令, 将会下载, 建立和运行一个基础的Lift应用.
+
+For Mac and Linux
++++++++++++++++++
+
+* 打开 http://liftweb.net/download[http://liftweb.net/download] 然后下载 Lift 2.5-RC2 ZIP 文件.
+* 解压缩ZIP文件.
+* 打开 _Terminal_ 或者你喜欢的命令行工具.
+* 打开解压后的文件,然后找到 `scala_29` 子文件夹, 然后进入 `lift_basic` 文件夹.
+* 运行:`./sbt`.
+* 程序会自动下载所需要的依赖库.
+* 在 SBT 上输入: `container:start`.
+* 打开你的浏览器, 然后打开 `http://127.0.0.1:8080/`.
+* 当你想结束时, 输入 `exit` 在SBT上, 然后会自动结束.
+
+For Windows
++++++++++++
+
+* 打开 http://liftweb.net/download[http://liftweb.net/download] 找到ZIP文件的 Lift 2.5-RC2, 存到你的计算机上.
+* 解压缩ZIP文件.
+* 打开解压缩的文件夹, 然后找到 `scala_29` 文件夹, 然后打开 `lift_basic`.
+* 双击 `sbt.bat` 运行SBT编译工具, 一个窗口会自动打开.
+* 程序会自动下载所需要的依赖库.
+* 如果Windows的防火墙禁止运行Java, 请选择"允许访问".
+* 在 SBT 上输入: `container:start`.
+* 打开你的浏览器, 然后打开 `http://127.0.0.1:8080/`.
+* 当你想结束时, 输入 `exit` 在SBT上, 然后会自动结束..
+
+Expected result
++++++++++++++++
+
+通过以上步骤, 你会运行一个基础的Lift应用, 结果会像以下一样 <<LiftBasicScreenshot>>.
+
+[[LiftBasicScreenshot]]
+.The basic Lift application home page.
+image::images/apphome.png[width=640]
+
+
+Discussion
+^^^^^^^^^^
+
+Lift没有通过常规的"安装"的方法运行, 而是通过编译工具来运行, 如SBT,Maven. 在这章中,我们下载了一个ZIP文件包含了四个尽可能简单的Lift应用, 然后运行了他们通过编译工具.
+
+Simple Build Tool
++++++++++++++++++
+
+输入 `sbt` 打开SBT, 一个基于Scala工程的(不仅仅是对于Lift)依赖库管理工具. SBT将会检查工程的定义, 然后下载所有需要的依赖库, 包括Lift.
+
+整个下载过程只进行一次, 然后下载的文件会存在 `.ivy2/` 在你的主目录下.
+
+你的应用编译文件是 `build.sbt`.  如果你打开它, 你会看到:
+
+* 基础信息关于你的应用, 包含一个名字和版本号;
+* resolvers, 一个字符串, 告诉SBT应该在哪里找到所需要的依赖库;
+* 插件的设置和Scala的编译器; 还有
+* 一个List的依赖库, 他们用来运行你的程序, 包括了Lift.
+
+[[RunningYourApplication]]
+运行你的应用
+++++++++++
+
+SBT命令 `container:start` 打开了一个web服务器在默认的端口8080上,并且
+传递requests到你的Lift应用. 名词 _container_ 的意思是一个能让你部署Lift应用的软件 这里有许多不同的选择. 比如 (_Jetty_ 或者_Tomcat_ 是比较受欢迎的) 他们都是通过同一个标准进行部署的.
+其实,你可以部署Lift在任何你想要的container上,.
+命令 `container:start` 是Jetty的命令.
+
+Source Code
++++++++++++
+
+程序的源代码在目录 `src/main/webapp` 和 `src/main/scala`.如果你看 `index.html` 文件在  `webapp` 文件夹下. 你会看到里面有一段 `lift:helloWorld`. 这是这个文件的引用 `scala/code/snippet/HelloWorld.scala`. 这是一个 _snippet invocation_ 并且是一个Lift的 _view first_ 网络应用设计模式. 这个模式没有routing的设置: 从前端的index页面,收集数据然后转发到view. 相反, view定义了后端函数取代的位置, 就像函数定义在 `HelloWorld.scala`.
+
+Lift 知道如何去看 `code` 包去寻找Snippet, 是因为那个包定义了位置在 `scala/bootstrap/liftweb/Boot.scala`. Boot文件会在Lift运行后首先运行, 你可以在这里
+定义许多Lift的行为.
+
+
+See Also
+^^^^^^^^
+
+SBt的文档在 http://www.scala-sbt.org[http://www.scala-sbt.org].
+
+Lift的教程在 _Simply Lift_ at http://simply.liftweb.net/[http://simply.liftweb.net/] and in _Lift in Action_ (Tim Perrett, 2011, Manning Publications Co).
+
+[[LiftFromScratch]]
+使用SBT建立一个Lift Project
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想建立一个Lift文档,但是不使用官网的ZIP文件
+
+Solution
+^^^^^^^^
+
+你需要设置SBT和Lift. 幸运的是, 只需要五个简单的文件
+
+第一, 建立一个SBT文件 `project/plugins.sbt` (所有文件名字都关联到文件的root目录):
+
+[source,scala]
+---------------------------------------------------------
+libraryDependencies <+= sbtVersion(v => v match {
+  case "0.11.0" => "com.github.siasia" %% "xsbt-web-plugin" % "0.11.0-0.2.8"
+  case "0.11.1" => "com.github.siasia" %% "xsbt-web-plugin" % "0.11.1-0.2.10"
+  case "0.11.2" => "com.github.siasia" %% "xsbt-web-plugin" % "0.11.2-0.2.11"
+  case "0.11.3" => "com.github.siasia" %% "xsbt-web-plugin" % "0.11.3-0.2.11.1"
+  case x if x startsWith "0.12" =>
+    "com.github.siasia" %% "xsbt-web-plugin" % "0.12.0-0.2.11.1"
+})
+---------------------------------------------------------
+
+这个文件告诉了SBT, 你将会使用xsbt-web-plugin并且让SBT选择正确的版本.
+
+然后,建立sbt编译文件, `build.sbt`:
+
+[source,scala]
+---------------------------------------------------------
+organization := "org.yourorganization"
+
+name := "liftfromscratch"
+
+version := "0.1-SNAPSHOT"
+
+scalaVersion := "2.10.0"
+
+seq(com.github.siasia.WebPlugin.webSettings :_*)
+
+libraryDependencies ++= {
+  val liftVersion = "2.5-RC2"
+  Seq(
+    "net.liftweb" %% "lift-webkit" % liftVersion % "compile",
+    "org.eclipse.jetty" % "jetty-webapp" % "8.1.7.v20120910"  % "container,test",
+    "org.eclipse.jetty.orbit" % "javax.servlet" % "3.0.0.v201112011016" %
+      "container,compile" artifacts Artifact("javax.servlet", "jar", "jar")
+  )
+}
+---------------------------------------------------------
+
+请随意改变到不同的版本, 不过主版本的Lift只能建立在住版本的Scala上.
+
+现在你有一个基础的Lift工程, 你可以使用 `sbt` 命令行. 它将会自动的下载所有需要的依赖库, 和适当的Scala版本, 最后返回一个prompt.
+
+然后, 建立以下文件 `src/main/webapp/WEB-INF/web.xml`:
+
+[source,xml]
+---------------------------------------------------------
+<!DOCTYPE web-app SYSTEM "http://java.sun.com/dtd/web-app_2_3.dtd">
+<web-app>
+  <filter>
+    <filter-name>LiftFilter</filter-name>
+    <display-name>Lift Filter</display-name>
+    <description>The Filter that intercepts Lift calls</description>
+    <filter-class>net.liftweb.http.LiftFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>LiftFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+</web-app>
+---------------------------------------------------------
+
+`web.xml` 文件告诉web容器, 比如说Jetty, 把所有的request都传递给Lift.
+
+然后,建立简单的 `index.html` 文件在 `src/main/webapp/index.html`. 比如:
+
+[source,html]
+---------------------------------------------------------
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Lift From Scratch</title>
+  </head>
+  <body>
+    <h1>Welcome, you now have a working Lift installation</h1>
+  </body>
+</html>
+---------------------------------------------------------
+
+最后, 设置基础的Lift启动文件 `Boot.scala` 在 `src/main/scala/bootstrap/Boot.scala`. 
+
+[source,scala]
+---------------------------------------------------------
+package bootstrap.liftweb
+
+import net.liftweb.http.{Html5Properties, LiftRules, Req}
+import net.liftweb.sitemap.{Menu, SiteMap}
+
+/**
+ * A class that's instantiated early and run.  It allows the application
+ * to modify lift's environment
+ */
+class Boot {
+  def boot {
+    // where to search snippet
+    LiftRules.addToPackages("org.yourorganization.liftfromscratch")
+
+    // Build SiteMap
+    def sitemap(): SiteMap = SiteMap(
+      Menu.i("Home") / "index"
+    )
+
+    // Use HTML5 for rendering
+    LiftRules.htmlProperties.default.set((r: Req) =>
+      new Html5Properties(r.userAgent))
+  }
+}
+---------------------------------------------------------
+
+恭喜, 你现在有一个可以运行的Lift工程了!
+
+你现在可以验证是不是有一个可以使用的Lift工程,通过打开Jetty,使用 `sbt` 命令行的 `container:start` 命令. 首先 `Boot.scala` 文件将会编译然后你会被提示, Jetty运行在 http://localhost:8080[http://localhost:8080]. 你应该可以看到你先前建立的 `index.html` 文件
+
+Discussion
+^^^^^^^^^^
+
+就像上边展示的那样,从一个模版建立一个新的Lift工程是一个相当简单的过程. 然而, 这是对一个新手来说非常有诀窍, 特别是你对JVM环境不熟悉, 或者对web容器不熟悉的时候. 如果你遇到任何问题, 请确保文件目录的完整性. 如果还有其他问题, 请到google group里寻求 http://groups.google.com/group/liftweb[Lift mailing list].
+
+Lift使用SBT或者相似的编译工具,编译一个同样架构的工程. 这个架构Scala的源码在 `src/main/scala` web源码在 `src/main/webapp`. 你的Scala文件必须都放在 `src/main/scala` 或者在任何你定义在`build.sbt` 的organization下, 我们的例子是 `src/main/scala/org/yourorganization/liftfromscratch/`. 测试文件需要放在 `src/test/` 而不是 `src/main/`. 同样,  `web.xml` 文件必须放在 `src/main/webapp/WEB-INF/` 才能被容器正确的调用.
+
+为了方便, 你需要你的工程像如下架构一样:
+
+---------------------------------------------------------
+- project root directory
+  | build.sbt
+  - project/
+    | plugins.sbt
+  - src/
+    - main/
+      - scala/
+        - bootstrap/
+          | Boot.scala
+        - org/
+          - yourorganization/
+            - liftfromscratch/
+              | <your Scala code goes here>
+      - webapp/
+        | index.html
+        | <any other web resources - images, HTML, JavaScript, etc - go here>
+        - WEB-INF/
+          | web.xml
+    - test/
+      - scala/
+        - org/
+          - yourorganization/
+            - liftfromscratch/
+              | <your tests go here>
+---------------------------------------------------------
+
+See Also
+^^^^^^^^
+
+这里有一个简单的工程你可以直接使用: https://github.com/bubblefoundry/lift-from-scratch[https://github.com/bubblefoundry/lift-from-scratch].
+
+[[texteditor]]
+使用文本编辑器开发
+~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想开发Lift应用,使用你喜欢的文档编译器,然后在浏览器中即时的查看修改结果.
+
+Solution
+^^^^^^^^
+
+当你修改的时候,运行SBT, 让SBT去检测Scala文件的修改. 为了达到目标, 你需要用命令 `sbt` 然后输入以下命令:
+
+--------------------------------------
+~; container:start; container:reload /
+--------------------------------------
+
+当你保存文件的时候, SBT会检测到保存的文件是否被修改,然后刷新工程.
+
+Discussion
+^^^^^^^^^^
+
+当一个SBT命令使用前缀 `~` 的时候, 意思是, 当文件改变的时候, 执行以下命令. 
+第一个分号后边继续跟着另一个命令的意思是, 当前一个命令成功后, 执行后边的命令. 在这里, 当
+`start` 运行成功后, `reload` 便会在文件改变的时候, 运行.
+
+当你使用这条SBT的命令时, 你会看到以下信息
+
+----------------------------------------------------------
+1. Waiting for source changes... (press enter to interrupt)
+-----------------------------------------------------------
+
+当你SBT窗口下, 键入enter, 你会退出 _triggered
+execution_ 模式 并且 SBT不再监听文件改变. 然而, 当SBT坚挺的时候, 文件改变后
+你会看到以下信息:
+
+----------------------------------------------------------------------------------
+[info] Compiling 1 Scala source to target/scala-2.9.1/classes...
+[success] Total time: 1 s, completed 15-Nov-2012 18:14:46
+[pool-301-thread-4] DEBUG net.liftweb.http.LiftServlet - Destroyed Lift handler.
+[info] stopped o.e.j.w.WebAppContext{/,[src/main/webapp/]}
+[info] NO JSP Support for /, did not find org.apache.jasper.servlet.JspServlet
+[info] started o.e.j.w.WebAppContext{/,[src/main/webapp/]}
+[success] Total time: 0 s, completed 15-Nov-2012 18:14:46
+2. Waiting for source changes... (press enter to interrupt)
+----------------------------------------------------------------------------------
+
+修改HTML文件, 不会触发SBT的编译和重载.
+这是因为SBT默认的行为是只监听Scala和Java的文件改变, 而且必须在目录`src/main/resources/`下.
+这个是没有问题的, 因为Jetty会重载你的HTML文件, 当你刷新页面时
+
+每次修改Scala文件的时候, 重启web容器并不是很理想, 你可以用过使用Jrebel来减少不必要的重启. <<jrebel>>.
+
+然而, 如果你真的有很多的修改, 你最好使用 `container:stop` 命令, 直到你真的准备好了, 然后再用 `container:start`. 这样可以防止SBT一直重启. SBT控制台能查看以前输入过的命令, 通过使用下箭头, 可以翻看以前的命令, 这样可以减少多次输入的麻烦.
+
+你可能在使用过程中看到以下错误:
+
+------------------------------------------
+java.lang.OutOfMemoryError: PermGen space
+------------------------------------------
+
+这里的 _permanent generation_ 是一个Java虚拟机的概念. 它是内存空间中存放class文件的一个地方 (与其他文件存放在一起). 他是一个固定大小的空间, 所以会出现溢出. 你可以想象, 持续的重启容器会不断的加载,重载class文件, 但是整个过程不是完美的, 所以最好的情况就是, 你把容器停止, 然后当修改完成代码后, 再重启.  如果你经常看到这个错误, 检查以下命令的设置 `-XX:MaxPermSize` 在 `sbt` (or `sbt.bat`) 脚本中, 如果你能修改它, 修改成双倍.
+
+See Also
+^^^^^^^^
+
+这里有更多关于触发的信息 http://www.scala-sbt.org/release/docs/Detailed-Topics/Triggered-Execution[http://www.scala-sbt.org/release/docs/Detailed-Topics/Triggered-Execution].
+
+SBT内核命令的引用: http://www.scala-sbt.org/release/docs/Detailed-Topics/Command-Line-Reference[http://www.scala-sbt.org/release/docs/Detailed-Topics/Command-Line-Reference].
+
+SBT web插件的引用: https://github.com/siasia/xsbt-web-plugin/wiki[https://github.com/siasia/xsbt-web-plugin/wiki].
+
+
+[[jrebel]]
+使用 JRebel
+~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+当你修改Scala源文件的时候, 通过JRbel. 你将避免重启应用.
+
+Solutions
+^^^^^^^^^
+
+安装JRbel需要三步, 安装, 每年更新一次Scala的License文件, 设置SBT调用JRebel.
+
+首先, 打开 http://zeroturnaround.com/software/jrebel/[http://zeroturnaround.com/software/jrebel/] 获得一个免费的Scala License.
+
+其次, 下载 "Generic ZIP Archive" 版本的JRebel, 解压缩并放到一个文件夹下. 在这里, 我使用 `/opt/zt/jrebel/`.
+
+当你收到你的JRebel账户信息时, 你可以复制你的验证token, 它在ZeroTurnaround网站的 "Active" 区域. 为了使用Token在本地, 运行JRbel的设置脚本:
+
+---------------------------------------
+$ /opt/zt/jrebel/bin/jrebel-config.sh
+---------------------------------------
+
+Windows的用户可以使用 `bin\jrebel-config.cmd`.
+
+在 "Activation" 设置里选择 "I want to use myJRebel", 然后在 "License"里, 粘贴你的actionvation token. 点击 "Activate"  按钮, 当你看到你的状态变成 "You have a valid myJRebel token" 点击 "Finish".
+
+最后, 设置 SBT, 在 `sbt` 脚本中开启JRbel.  这意味着设置 `-javaagent` 和 `-noverify` Java标签, 然后开启JRebel的Lift插件.
+
+对于Mac和Linux, 脚本是在Lift的下载中就有的:
+
+--------------------------
+java -Drebel.lift_plugin=true -noverify -javaagent:/opt/zt/jrebel/jrebel.jar \
+ -Xmx1024M -Xss2M -XX:MaxPermSize=512m -XX:+CMSClassUnloadingEnabled -jar \
+ `dirname $0`/sbt-launch-0.12.jar "$@"
+--------------------------
+
+对于Windows, 设置 `sbt.bat`:
+
+--------------------------
+set SCRIPT_DIR=%~dp0
+java -Drebel.lift_plugin=true -noverify -javaagent:c:/opt/zt/jrebel/jrebel.jar \
+ -XX:+CMSClassUnloadingEnabled -XX:MaxPermSize=256m -Xmx1024M -Xss2M \
+ -jar "%SCRIPT_DIR%\sbt-launch-0.12.jar" %*
+--------------------------
+
+这就是配置JRbel所需要的所有设置. 当你开始SBT的时候, 你会看到类似于如下的提示:
+
+---------------------------
+#############################################################
+
+  JRebel 5.1.1 (201211271929)
+  (c) Copyright ZeroTurnaround OU, Estonia, Tartu.
+
+  Over the last 30 days JRebel prevented
+  at least 335 redeploys/restarts saving you about 13.6 hours.
+....
+---------------------------
+
+当JRbel启动时, 你可以使用`container:start` 运行你的应用, 修改和编译Scala文件后会自动重载 你会看到重载的提示类似于如下:
+
+-------------------------------------------------------------------------
+[2012-12-16 23:15:44] JRebel: Reloading class 'code.snippet.HelloWorld'.
+-------------------------------------------------------------------------
+
+That change is live, without having to restart the container.
+
+Discussion
+^^^^^^^^^^
+
+JRebel会极大的提高你的开发速度. 他重载一个Java或Scala代码在一个已经运行的JVM中, 并且不需要重启.  你可以只编译一个文件, 当你打开浏览器时, 就会自动的看到新的结果.
+
+尽管使用了Jrebel, 你依然需要每次都重启你的应用, 但是JRebel通常会减少重启的次数. 比如说, `Boot.scala` 在你应用开始时会运行, 所以尽管你使用JRebel, 当你修改它时, 你依然需要重启容器.
+
+而且这里还有另外的一些情况下 JRebel是没用的, 比如说一个superclass改变. 一般来说, 这种情况下, JRebel会显示一个提示在命令行.  如果你看到了提示, 你需要停止, 并且重启你的容器.
+
+命令 `-Drebel.lift_plugin=true` 添加Lift的功能性到JRebel.  特别是, 他允许JRebel重载 `LiftScreen`, `Wizard` 和 `RestHelper`. 这意味着你可以改变, fields 或者 screens, 和 REST `serve` code.
+
+
+Purchased licenses
+++++++++++++++++++
+
+在这里, 我们使用的是一个免费的license, 叫做myJRebel. 他通过activation code和JRebel服务器通信.  如果你曾经购买过 ZeroTurnaround 的license, 情况有一些不同. 你会有你的license key 在一个名叫 `jrebel.lic` 的文件中. 你可以把它放在你Home的 `.jrebel` 文件夹下. 或者一个叫 `jrebel.jar` (e.g., in the `/opt/zt/jrebel/` 的文件夹 如果你安装到这个目录), 或者你曾经安装的特定的目录.  对于其他设置, 改变 `sbt` 脚本, 并且设置特定目录, 通过使用以下的命令:
+
+-----------------------------------
+-Drebel.license=/path/to/jrebel.lic
+-----------------------------------
+
+
+See Also
+^^^^^^^^
+
+你可以找到更多关于JRebel如何工作的信息在: http://zeroturnaround.com/software/jrebel/resources/faq/[http://zeroturnaround.com/software/jrebel/resources/faq/].
+
+对Lift的支持, 是写在一个2012年的blog中: http://zeroturnaround.com/jrebel/lift-support-in-jrebel/[http://zeroturnaround.com/jrebel/lift-support-in-jrebel/], 在这里, 你会找到更多的插件.
+
+[[eclipse]]
+使用Eclipse开发
+~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你希望使用Eclipse IDE来开发Lift应用.并且点击浏览器的reload
+查看更新.
+
+Solution
+^^^^^^^^
+
+使用 "Scala IDE for Eclipse" Eclipse插件. 以下链接有如何配置: http://scala-ide.org[http://scala-ide.org]. 这里有很多的可以选择的地方: (nightly builds, milestones) 但是, 请用一个稳定版本, 这会让你的Eclipse更稳定的支持Scala.
+
+为了建立一个Eclipse自动重载的工程, 你需要安装 "sbteclipse", 这需要配置 `projects/plugins.sbt` 在你的Lift工程中:
+
+[source,scala]
+-----------------------------------------------------------------------
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.1.2")
+-----------------------------------------------------------------------
+
+你可以建立剩下的文件 (`.project` and `.classpath`) 通过以下的命令:
+
+-------
+eclipse
+-------
+
+打开工程, 然后点击"File > Import.." 然后选择 "General > Existing
+Projects into Workspace". 找到, 并且选择你的Lift project. 然后, 你就可以
+使用你的Eclipse开发应用了.
+
+如果你想看它是如何工作的, 运行 SBT 在一个单独的窗口. 键入 `sbt` 在任何一个Eclipse外的窗口, 然后键入如下命令:
+
+--------------------------------------
+~; container:start; container:reload /
+--------------------------------------
+
+这个命令的用法, 在 <<texteditor>> 这里, 但是, 如果你使用JRebel (see <<jrebel>>) 你只需要运行 `container:start` .
+
+然后你就可以保存修改的问题, 然后点击编译, 然后重载你的浏览器, 你会看到更新.
+
+Discussion
+^^^^^^^^^^
+
+一个IDE最大的用途之一就是浏览源代码, 通过 cmd+click (Mac) 或者 F3 (PC).
+你可以让SBT `eclipse` 下载Lift的源代码和Scaladoc, 你可以通过点击Lift的方法名字和class名字, 查看到Lift的源代码, 这会是学习Lift的一个很好的方法.
+
+你可以通过以下命令来实现它, 在SBT运行 `eclipse with-source=true` , 如果你想把它设置成默认,你需要在 `build.sbt` 文件里添加:
+
+[source,scala]
+------------------------------
+EclipseKeys.withSource := true
+------------------------------
+
+如果你发现你经常使用一些插件, 你也许会希望在全局下声明它, 这样你可以使用它在所有的工程里. 你可以通过以下命令实现它:
+建立一个问题 `~/.sbt/plugins/plugins.sbt` 包含以下信息:
+
+[source,scala]
+------------------------------------------------------------------------
+resolvers += Classpaths.typesafeResolver
+
+addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.1.2")
+------------------------------------------------------------------------
+
+请注意 `resolvers` 和 `addSbtPlugin` 之间的空格.  在 `.sbt` 文件里, 每条语句之间必须有一个空行.
+
+设置全局配置 (比如说 `withSource`) 在 `~/.sbt/global.sbt`.
+
+See Also
+^^^^^^^^
+
+还有很多sbteclipse上有用的设置, 你可以在这里找到: https://github.com/typesafehub/sbteclipse/wiki[https://github.com/typesafehub/sbteclipse/wiki]. 你也可以在这里找到更新的插件.
+
+SBT的 `~/.sbt/` 结构在这里有讲解, http://www.scala-sbt.org/release/docs/Getting-Started/Using-Plugins[http://www.scala-sbt.org/release/docs/Getting-Started/Using-Plugins], 在wiki上, 对于全局配置的方法在 http://www.scala-sbt.org/release/docs/Detailed-Topics/Global-Settings[http://www.scala-sbt.org/release/docs/Detailed-Topics/Global-Settings].
+
+[[idea]]
+使用IntelliJ IDEA开发
+~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想要开发Lift应用在 IntelliJ IDEA 环境下.
+
+Solution
+^^^^^^^^
+
+你需要IntelliJ的Scala插件, 和SBT插件去生成一个IDEA的工程.
+
+你只需要安装一次IntelliJ的插件, 以下的步骤是对于 IntelliJ IDEA 12的.  安装的细节也许对于不同版本是不同的, 但是大体的思想是下载和使用Scala的插件.
+
+在 IntelliJ 的 "Welcome to Intellij IDEA" 界面, 选择 "Configure" 然后选择 "Plugins". 算泽 "Browse repositories...". 在搜索中, 右上角, 键入 "Scala".  你会发现只有几个会匹配结果: 选择 "Scala".  在右边, 你会看到发行的信息为 "Plugin for Scala language support" 和公司名称为 JetBrains Inc. 选择  "Download and Install"  (或者右键点击,下载).用 "Close" 关闭窗口, 然后点击 OK 推出. IntelliJ将会让你重新启动.
+
+当你设置完成后, 你将需要在你的工程里,添加一个SBT的插件, 添加以下命令到 `projects/plugins.sbt`:
+
+[source,scala]
+------------------------------------------------------------------------
+addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.3.0")
+------------------------------------------------------------------------
+
+打开SBT, 在SBT控制台里输入:
+
+---------
+gen-idea
+---------
+
+这个命令会生成 `.idea` 和 `.iml` IntelliJ需要的文件. 在IntelliJ中, 你可以直接用以下方式打开工程 "File" 目录, 点 "Open..." 然后选择你的工程.
+
+如果你想看它是如何工作的, 运行 SBT 在一个单独的窗口. 键入 `sbt` 在任何一个IntelliJ外的窗口, 然后键入如下命令:
+
+--------------------------------------
+~; container:start; container:reload /
+--------------------------------------
+
+这个命令的用法, 在 <<texteditor>> 这里, 但是, 如果你使用JRebel (see <<jrebel>>) 你只需要运行 `container:start` .
+
+每次你编译工程的时候, 容器会自动找到改变的文件, 你在浏览器重载的时候, 你会看到更新.
+
+Discussion
+^^^^^^^^^^
+
+默认情况下, `gen-idea` 命令会下载依赖库的源码. 这意味着, 你可以直接点击方法名字或者class名字查看Lift的源码.
+
+如果你想使用最新版本的插件, 你需要添加以下命令到 `plugin.sbt`:
+
+[source,scala]
+------------------------------------------------------------------------
+resolvers += "Sonatype snapshots" at "http://oss.sonatype.org/content/repositories/snapshots/"
+------------------------------------------------------------------------
+
+如果你想把它设置成全局命令, 请参考 <<eclipse>>.
+
+See Also
+^^^^^^^^
+
+sbt-idea 插件在 https://github.com/mpeltonen/sbt-idea[https://github.com/mpeltonen/sbt-idea] 没有教你如何配置. 你可以看 `notes` 文件夹下的文档来作为配置的参考.
+
+JetBrains 有一个讲述 Scala plugin 的blog: http://blog.jetbrains.com/scala/[http://blog.jetbrains.com/scala/].
+
+[[ViewH2]]
+查看lift_proto H2 Database
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你使用默认的 `lift_proto.db` H2 database, 你想查看里面的tables.
+
+Solution
+^^^^^^^^
+
+使用 H2 集成的默认web接口. 请参考以下步骤:
+
+* 找到 H2 JAR 文件. 对于我来说, 它在: `~/.ivy2/cache/com.h2database/h2/jars/h2-1.2.147.jar`.
+* 打开一个命令行, 然后用以下命令打开JAR文件: `java -cp /path/to/h2-version.jar org.h2.tools.Server`
+* 它会打开你的浏览器, 并且让你登入.
+* 选择 "Generic H2 Server" 在 "Saved Settings".
+* 输入 `jdbc:h2:/path/to/youapp/lift_proto.db;AUTO_SERVER=TRUE` 在 "JDBC URL", 你可以调整你数据库的URL和名字, 默认是("lift_proto.db") .
+* 点击 "Connect" 查看你当前的数据库.
+
+Discussion
+^^^^^^^^^^
+
+默认的Lift工程包含一个数据库, 比如 `lift_basic`, 使用的是 H2 relational database, 因为它可以不需要特别的配置, 只需要添加依赖库就可以使用. 它是一个非常不错的工程,  尽管生产环境下, 一般使用独立的数据库, 比如 PostgreSQL 或者 MySQL.
+
+尽管你部署的时候, 也许使用的是非H2数据库, 但是我们希望你能保留H2, 因为它的 in-memory 功能很适合测试, 它不会把文件存在本地, 你可以直接删除它, 当你不需要再测试.
+
+如果你不喜欢web接口, 你可以使用它的连接设置, 连接其他的SQL数据库工具.
+
+See Also
+^^^^^^^^
+
+H2数据库的特性:  http://www.h2database.com[http://www.h2database.com].
+
+如果你经常使用命令行, 请考虑确保它能访问. Diego Medina 在他的博客中描述了如何操作 https://fmpwizard.telegr.am/blog/lift-and-h2[https://fmpwizard.telegr.am/blog/lift-and-h2].
+
+Lift的例子工程使用 <<Squeryl>> 里开启了H2的命令行. 源代码在: https://github.com/LiftCookbook/cookbook_squeryl[https://github.com/LiftCookbook/cookbook_squeryl].
+
+[[snapshot]]
+使用最新的Lift
+~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用 ("snapshot") 版本的 Lift.
+
+Solution
+^^^^^^^^
+
+你需要改变两个地方在 `build.sbt` 文件. 首先, 添加依赖库:
+
+[source,scala]
+----
+resolvers += "snapshots" at "http://oss.sonatype.org/content/repositories/snapshots"
+----
+
+然后, 修改 `liftVersion` 的参数. 比如说, 使用 2.5-SNAPSHOT 版本的 Lift:
+
+[source,scala]
+--------------------------------
+val liftVersion = "2.5-SNAPSHOT"
+--------------------------------
+
+重启 SBT (或者使用 `reload` 命令) 会触发下载.
+
+Discussion
+^^^^^^^^^^
+
+生产版本的Lift (e.g., "2.4", "2.5"),和 milestone releases
+(e.g., "2.5-M3") 和 release candidates (e.g., "2.5-RC1") 被发布在一个依赖库目录下. 所以当SBT下载他们的时候, 只需要下载一次.
+
+Snapshot releases 是不同的: 他们是自动生成的, 并且经常改变. 你可以让SBT强制
+使用他们通过 `clean` 然后 `update`.
+
+See Also
+^^^^^^^^
+
+如果你看关于 SNAPSHOT 版本的细节, 请看 at http://www.sonatype.com/books/mvnref-book/reference/pom-relationships-sect-pom-syntax.html[http://www.sonatype.com/books/mvnref-book/reference/pom-relationships-sect-pom-syntax.html].
+
+
+[[NewScala]]
+使用新版本Scala
+~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+当一个新版本的Scala被释放出后, 你想第一时间使用它在你的Lift工程.
+
+Solution
+^^^^^^^^
+
+你会找到最新的snapshot版本的lift使用最新版本的Scala. 不过, 也许你更希望是等待一个稳定版本.
+提供最新版本的Scala是 _binary compatible_. 不过你可以通过修改Build文件, 强制使用最新版本.
+
+比如说, 假设你的`build.sbt` 文件 设置的是使用 Lift 2.5
+和 Scala 2.9.1:
+
+[source,scala]
+---------------------------------------------------------------------
+scalaVersion := "2.9.1"
+
+libraryDependencies ++= {
+  val liftVersion = "2.5"
+  Seq(
+    "net.liftweb" %% "lift-webkit" % liftVersion % "compile->default"
+  )
+}
+---------------------------------------------------------------------
+
+假设你现在想使用Scala 2.9.2 但是 Lift 2.5 只支持
+ Scala 2.9.1. 替换 `%%` 成 `%` 在 `net.liftweb`上, 可以强制使用新的版本:
+
+[source,scala]
+--------------------------------------------------------------------------
+scalaVersion := "2.9.2"
+
+libraryDependencies ++= {
+  val liftVersion = "2.5"
+  Seq(
+    "net.liftweb" % "lift-webkit_2.9.1" % liftVersion % "compile->default"
+  )
+}
+--------------------------------------------------------------------------
+
+这里我们改变的是 `scalaVersion`, 变成一个新的版本, 但是明确的说,我们希望使用 2.9.1 Scala 版本.
+如果两个版本的Scala是 binary compatible 那么这个是有效的.
+
+Discussion
+^^^^^^^^^^
+
+依赖库通常都有自己的命名方法.  比如说, `lift-webkit` 库, 对于 Lift 2.5-RC2 被叫做 `lift-webkit_2.9.1-2.5-RC2.jar`.  一般来说, 在 `build.sbt`我们简单的使用 `"net.liftweb" %% "lift-webkit"` , SBT会把他变成文件的名字, 然后下载它.
+
+然而, 在这里我们强制SBT下载, 使用Scala的 2.9.1 version, 而不是让它自己计算下载文件的名字. 这就是, 在一个依赖库上, 使用 `%%` 和 `%` 的区别: 使用 `%%` 你不需要制定Scala的版本. SBT会自动的添加 `scalaVersion` 到文件名上; 当使用 '%' SBT将不会自动添加, 所以我们必须自己添加更精确的库的名字.
+
+请记住, 这只是能使用在Scala小版本上: 每个大版本的释放, 都会打破兼容性. 比如说 Scala 2.9.1 兼容 Scala 2.9.0, 但是不兼容 2.10.
+
+See Also
+^^^^^^^^
+
+Scala二进制兼容性, 在Scala用户的mailing list: http://article.gmane.org/gmane.comp.lang.scala.user/39290[http://article.gmane.org/gmane.comp.lang.scala.user/39290].
+
+SBT的配置在: http://www.scala-sbt.org/release/docs/Getting-Started/Library-Dependencies[http://www.scala-sbt.org/release/docs/Getting-Started/Library-Dependencies].
+
+<<snapshot>> 讲述了如何使用snapshot版本的Lift.
+

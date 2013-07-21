@@ -1,0 +1,90 @@
+使用mapper在表达层的关系型数据库
+------------------------------
+
+序列数和存在数据
+~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你有一个数据库, 里面有已经存放的数据, 但是Lift插入数据是通过从1开始的primary key id, 或者其他已经存在的数据数据
+
+Solution
+^^^^^^^^
+
+通过修改数据库的自然序列数, 使得Lift知道你想开始的序列数的值.
+
+第一步, 你需要知道, 你的数据库是从什么数开始的. 最可能的情况下, 这个数是在你的一个最大的primary key ID上. 在PostgreSQL中, 比如说, 你可以通过使用命令 `psql` 查看:
+
+[source,sql]
+----------------------------
+SELECT MAX(id) FROM mytable;
+----------------------------
+
+为了找到存在的数, 运行 `\ds` in `psql`. 序列的改变会包含你table的名字. 你可以这样改变它:
+
+[source,sql]
+------------------------------------------------
+ALTER SEQUENCE mytable_id_seq RESTART WITH 1000;
+------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+Lift遵循数据库的序列规定来生成一个primary key. 如果你想插入序列之间的数据, 序列数将不会知道它应该插入的位置 (这不是Lift所能做的). 所以以上答案是通过修改起始的序列, 跳过已有的序列数, 来找到正确的位置.
+
+以上也可以用在Mapper和Record上.
+
+See Also
+^^^^^^^^
+
+* Mailing list discussion "https://groups.google.com/forum/?fromgroups#!topic/liftweb/eAelsvlFkaI[Mapper starts counting primary keys with key 1 in a non-empty table]".
+* PostgreSQL http://www.postgresql.org/docs/9.1/static/functions-sequence.html[Sequence
+Manipulation Functions].
+* MySQL http://dev.mysql.com/doc/refman/5.6/en/example-auto-increment.html[AUTO-INCREMENT]
+介绍了如何使用 ALTER TABLE 改变序列数.
+* http://www.techonthenet.com/oracle/sequences.php[Updating ORACLE sequence] involves changing the incrementing step to cover the values to skip. 
+
+监视schema的改变
+~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你不想自动转移你的schema, 但是你想知道它是否被改变.
+
+Solution
+^^^^^^^^
+
+运行 `Schemifier` , 然后捕获它的改变. 比如说, 在 `Boot.scala` 中:
+
+[source,scala]
+------------------------------------------------------------------------------
+val cmds = Schemifier.schemify(false, true, Schemifier.infoF _, User, Company)
+
+if (!cmds.isEmpty) {
+  error("Database schema is out of date. The following is missing: \n"+
+    cmds.mkString("\n"))
+}
+------------------------------------------------------------------------------
+
+Discussion
+^^^^^^^^^^
+
+命令 `schemify` 的参数和返回为:
+
+* performWrite - 这个例子使用了 `false` 意味着数据库将不会update.
+* structureOnly - `true` to check the tables and columns (not indexes).
+* logFunc - 作为Log, 但是只当我们需要写入数据库, 但是我们不需要.
+* tables (mapper objects) - 我们需要的tables.
+* 结果是一个 `List[String]` 是一个准备更新的语句.
+
+根据以上的信息, 你可以自由的选择你的参数, 来满足你的需求
+
+See Also
+^^^^^^^^
+
+* https://github.com/lift/framework/blob/master/persistence/mapper/src/main/scala/net/liftweb/mapper/Schemifier.scala[Schemifier.scala] source.
+* https://groups.google.com/forum/?fromgroups#!msg/liftweb/DM4kYVz_Z2c/vO0t-So3vVcJ[Mailing
+list discussion].
+

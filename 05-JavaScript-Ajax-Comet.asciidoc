@@ -1,0 +1,990 @@
+[[Ajax]]
+JavaScript, Ajax, Comet
+-----------------------
+
+作为一个LiftAjax和Comet功能的介绍, 请参考 _Simply Lift_ at http://simply.liftweb.net[http://simply.liftweb.net], chapter 9 of _Lift in Action_ (Perrett, 2012, Manning Publications Co.), 或者观看 Diego Medina的演讲 https://fmpwizard.telegr.am/blog/comet-actors-presentation[https://fmpwizard.telegr.am/blog/comet-actors-presentation].
+
+这章的源代码在: https://github.com/LiftCookbook/cookbook_ajax[https://github.com/LiftCookbook/cookbook_ajax].
+
+
+[[ButtonTriggerServerCode]]
+通过使用按钮触发服务端代码
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想, 当用户按某个按钮时, 触发一段服务端的代码.
+
+Solution
+^^^^^^^^
+
+使用 `ajaxInvoke`:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml
+import net.liftweb.http.js.{JsCmd, JsCmds}
+import net.liftweb.common.Loggable
+
+object AjaxInvoke extends Loggable {
+
+  def callback() : JsCmd = {
+    logger.info("The button was pressed")
+    JsCmds.Alert("You clicked it")
+  }
+
+  def button = "button [onclick]" #> SHtml.ajaxInvoke(callback)
+}
+----
+
+在这个例子中, 我们绑定 `ajaxInvoke` 到一个按钮: 当用户按下时, Lift会执行你设置在 `ajaxInvoke` 中的命令.
+
+那个`callback`方法, 只是log一个信息然后返回JavaScript报警到浏览器中. 相关的HTML代码为:
+
+[source,html]
+----
+<div data-lift="AjaxInvoke.button">
+  <button>Click Me</button>
+</div>
+----
+
+Discussion
+^^^^^^^^^^
+
+这里, 最重要的方法你传递给`ajaxInvoke` 时 `Unit => JsCmd`, 这意味着你想触发一系列命令, 当你使用 `Noop` 时, 你不想任何事情发生, 或者你想改变DOM元素, 他们都是JavaScript的实现.
+
+在上一个例子中, 你使用了一个按钮, 但是它会工作在任何你绑定的元素中.  我们绑定在 _onclick_ 事件上, 不过你可以绑定在任何你想要的事件上.
+
+和 `ajaxInvoke` 相关的, 有以下方法:
+
+* `SHtml.onEvent` 需要一个 `String => JsCmd` 作为参数, 因为它需要传递一个node的 `value`. 在上个例子中, 这将是一个空String, 因为一个button没有value.
+* `SHtml.ajaxCall` 是一个比 `onEvent` 更具体的方法, 你可以直接给它一个你想调用的服务端的方法.
+* `SHtml.jsonCall` 也是一个更具体的方法: 你给它一个能返回JSON的客户端的方法, 这个方法可以把JSON传递给服务端.
+
+让我们分别看看他们是怎么用的.
+
+onEvent -- 接收一个DOM上的 `value` 
++++++++++++++++++++++++++++++++++++
+
+你可以使用 `onEvent` 在任何包含 `value` 属性的元素上. 你提供给 `onEvent` 的方法, 将会被赋值, 这个值就是DOM的value. 作为一个例子, 我们可以写一个snippet, 给用户一个挑战, 然后验证是否有正确的回复:
+
+[source,scala]
+----
+package code.snippet
+
+import scala.util.Random
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml
+import net.liftweb.http.js.JsCmds.Alert
+
+object OnEvent {
+
+  def render = {
+    val x, y = Random.nextInt(10)
+    val sum = x + y
+
+    "p *" #> "What is %d + %d?".format(x,y) &
+    "input [onchange]" #> SHtml.onEvent( answer =>
+      if (answer == sum.toString) Alert("Correct!")
+      else Alert("Try again")
+     )
+  }
+
+}
+----
+
+这个snippet让用户给两个随机数做加法,在 `<p>` tag中, 然后绑定验证方法在 `<input>`:
+
+[source,html]
+----
+<div data-lift="OnEvent">
+  <p>Problem appears here</p>
+  <input placeholder="Type your answer"></input>
+</div>
+----
+
+当 `onchange` 被触发 (用户按回车, 或者tab), 输入的文字会发送到 `onEvent` 成为一个 `String`.
+
+
+ajaxCall -- 接受任意的客户端String
+++++++++++++++++++++++++++++++++++
+
+当 `onEvent` 发送 `this.value` 到你的服务端时, `ajaxCall` 允许你指定一个服务端表达式, 然后传递值.
+
+为了展示它, 我们建立一个模版, 里面包含两个元素: 一个按钮和一个文本域. 我们绑定我们的方法到按钮上, 但是从文字域里读取数值:
+
+[source,html]
+----
+<div data-lift="AjaxCall">
+  <input id="num" value="41"></input>
+  <button>Increment</button>
+</div>
+----
+
+我们想让按钮读取 `num` 域, 增加它, 然后返回到文本域:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml
+import net.liftweb.http.js.JE.ValById
+import net.liftweb.http.js.JsCmds._
+
+object AjaxCall {
+
+ def increment(in: String) : String =
+  asInt(in).map(_ + 1).map(_.toString) openOr in
+
+ def render = "button [onclick]" #>
+   SHtml.ajaxCall(ValById("num"), s => SetValById("num", increment(s)) )
+
+ }
+----
+
+`ajaxCall` 的第一个参数是一个表达式, 它会生成功一个我们方法需要的值. 它可以是任何的 `JsExp`, 我们通过使用 `ValById` 可以通过id查看元素. 我们可以直接调用Jquery使用以下语句 `JsRaw("$('#num').val()")`.
+
+`ajaxCall` 第二个参数是把 `JsExp` 表达式作为一个 `String`. 我们使用Lift JavaScript之一的命令去替换一个值. 新的值是增加后的值.
+
+这个代码的结果是, 用户按按钮, 然后数值增加. It should go without saying that these are simple illustrations, and you probably don't want a server round-trip to add one to a number. The techniques come into their own when there is some action of value to perform on the server.
+
+You may have guessed that `onEvent` is implemented as an `ajaxCall` for `JsRaw("this.value")`.
+
+
+jsonCall -- Receiving a JSON Value
+++++++++++++++++++++++++++++++++++
+
+不管是 `ajaxCall` 还是 `onEvent` 都最后要执行一个 `String => JsCmd` 方法. 理论上, `jsonCall` 的参数为 `JValue => JsCmd`, 这意味着你可以传递一个复杂的数据结构从JavaScript到你的服务端.
+
+为了展示这个, 我们将建立一个HTML模版, 要求用户输入, 然后用一个方法把用户输入变成JSON, 然后一个按钮, 可以把JSON送到服务端:
+
+
+[source,html]
+----
+<div data-lift="JsonCall">
+  <p>Enter an addition question:</p>
+  <div>
+    <input id="x"> + <input id="y"> = <input id="z">.
+  </div>
+  <button>Check</button>
+</div>
+
+<script type="text/javascript">
+// <![CDATA[
+function currentQuestion() {
+  return {
+    first:  parseInt($('#x').val()),
+    second: parseInt($('#y').val()),
+    answer: parseInt($('#z').val())
+  };
+}
+// ]]>
+----
+
+在服务端, 我们检查JSON是否代表着一个数值的增加:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml
+import net.liftweb.http.js.{JsCmd, JE}
+import net.liftweb.common.Loggable
+import net.liftweb.json.JsonAST._
+import net.liftweb.http.js.JsCmds.Alert
+import net.liftweb.json.DefaultFormats
+
+object JsonCall extends Loggable {
+
+  implicit val formats = DefaultFormats
+
+  case class Question(first: Int, second: Int, answer: Int) {
+    def valid_? = first + second == answer
+  }
+
+  def render = {
+
+    def validate(value: JValue) : JsCmd = {
+      logger.info(value)
+      value.extractOpt[Question].map(_.valid_?) match {
+        case Some(true) => Alert("Looks good")
+        case Some(false) => Alert("That doesn't add up")
+        case None => Alert("That doesn't make sense")
+      }
+    }
+
+    "button [onclick]" #>
+      SHtml.jsonCall( JE.Call("currentQuestion"), validate _ )
+  }
+}
+----
+
+从下往上看这个snippet, 我们看到一个绑定在 `<button>` 和 `jsonCall`. 我们处理的数值来自于一个JavaScript方法 `currentQuestion`.  这个方法定义在HTML模版上. 当按钮按下的时候, 这个方法被调用然后它返回的值会传入 `validate` 中, 它是我们的 `JValue => JsCmd` 方法.
+
+所有的 `validate` 做的事是, 查看JSON数据, 然后提示用户是否正确.  为了做这个, 我们使用解析器, 把一个JSON解析到一个cass class中, 并且调用 `valid_?` 测试数值是否增加成功.  它会计算出一个 `Some(true)` 如果增加成功, `Some(false)` 如果不成功, 或者 `None` 如果没有输入, 或者输入的不是数字.
+
+运行这段代码, 然后输入1, 2, 和 3, 将会产生以下log:
+
+[source,scala]
+----
+JObject(List(JField(first,JInt(1)), JField(second,JInt(2)),
+  JField(answer,JInt(3))))
+----
+
+这是一个 `JValue` 表达的JSON.
+
+See Also
+^^^^^^^^
+
+<<SelectOptionChange>> 包含一个例子 `SHtml.onEvents` 绑定一个方法到一些 `NodeSeq`.
+
+另一个例子关于 `AjaxInvoke` 请看 _Call Scala code from JavaScript_ section of Diego Medina's blog at: http://blog.fmpwizard.com/scala-lift-custom-wizard[http://blog.fmpwizard.com/scala-lift-custom-wizard].
+
+_Exploring Lift_, chapter 10, lists various `JsExp` classes you can use for `ajaxCall`: http://exploring.liftweb.net/master/index-10.html[http://exploring.liftweb.net/master/index-10.html].
+
+
+
+[[SelectOptionChange]]
+当选择的选项改变时, 调用服务器端代码
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+当一个HTML的选择框改变的时候, 你想调用服务器端的一些代码.
+
+
+Solution
+^^^^^^^^
+
+注册一个 `String => JsCmd` 方法到 `SHtml.ajaxSelect`.
+
+在这里例子中, 我们将查看用户选择的一个星球到地球的距离.  这个查看会在服务器端发生, 并且更新客户端:
+
+[source, html]
+-----
+<div data-lift="HtmlSelectSnippet">
+  <div>
+    <label for="dropdown">Planet:</label>
+    <select id="dropdown"></select>
+  </div>
+  <div id="distance">Distance will appear here</div>
+</div>
+-----
+
+[source, scala]
+-----
+package code.snippet
+
+import net.liftweb.common.Empty
+import net.liftweb.util.Helpers._
+import net.liftweb.http.SHtml.ajaxSelect
+import net.liftweb.http.js.JsCmd
+import net.liftweb.http.js.JsCmds.SetHtml
+import xml.Text
+
+class HtmlSelectSnippet {
+
+  // Our "database" maps planet names to distances:
+  type Planet = String
+  type LightYears = Double
+
+  val database = Map[Planet,LightYears](
+    "Alpha Centauri Bb" -> 4.23,
+    "Tau Ceti e" -> 11.90,
+    "Tau Ceti f" -> 11.90,
+    "Gliese 876 d" -> 15.00,
+    "82 G Eridani b" -> 19.71
+  )
+
+  def render = {
+
+    // To show the user a blank label and blank value option:
+    val blankOption = ("" -> "")
+
+    // The complete list of options includes everything in our database:
+    val options : List[(String,String)] =
+      blankOption ::
+      database.keys.map(p => (p,p)).toList
+
+    // Nothing is selected by default:
+    val default = Empty
+
+    // The function to call when an option is picked:
+    def handler(selected: String) : JsCmd = {
+      SetHtml("distance", Text(database(selected) + " light years"))
+    }
+
+    // Bind the <select> tag:
+    "select" #> ajaxSelect(options, default, handler)
+  }
+}
+-----
+
+最后一行代码是主要工作代码.  它生成选项, 并且绑定方法 `handler` 到选项. handler方法将会在选项改变的时候被调用.
+
+我们使用相同的 `String` (星球的名字) 作为选项的标签和值, 但是他们可以不相同.
+
+Discussion
+^^^^^^^^^^
+
+为了了解这里发生了什么, 请看以下Lift生成的HTML:
+
+[source, html]
+-----
+<select id="dropdown"
+  onchange="liftAjax.lift_ajaxHandler('F470183993611Y15ZJU=' +
+    this.options[this.selectedIndex].value, null, null, null)">
+  <option value=""></option>
+  <option value="Tau Ceti e">Tau Ceti e</option>
+  ...
+</select>
+-----
+
+这个 `handler` 方程被Lift缓存的id为 "F470183993611Y15ZJU" (只在这里有效).一个 "onchange" 事件处理被添加到选项上, 并且方程会传递值到服务器端. 一个 `lift_ajaxHandler` 的 JavaScript 方法, 定义在 `liftAjax.js` 会被自动的添加到你的页面底端.
+
+
+收集表格提交的数值
++++++++++++++++++
+
+如果你需要额外的, 在一个表格提交的时候收集一个选项的值, 你可以使用 `SHtml.onEvents`.  它会添加一个事件监听到 `NodeSeq`, 当事件发生的时候触发一个服务端代码.  我们可以使用它到一个普通的选择框或者表格, 但是把它连到Ajax, 会让它传送数据到服务器端.
+
+为了实现它, 需要我们修改一小部分我们的代码:
+
+[source, scala]
+----
+var selectedValue : String = ""
+
+"select" #> onEvents("onchange")(handler) {
+  select(options, default, selectedValue = _)
+} &
+"type=submit" #> onSubmitUnit( () => S.notice("Destination "+selectedValue))
+----
+
+我们使用相同的 `handler` 方法, 当一个 "onchange" 事件被触发时.  这个事件会发生在 `SHtml.select` 上, 当表格提交时, 它储存着 `selectedValue` . 我们也绑定了提交按钮到一个方法, 它可以在用户选择的时候, 生成一个提示.
+
+相关的HTML也会有一些变化.  我们需要添加一个按钮, 确保表格工作:
+
+[source,html]
+----
+<div data-lift="HtmlSelectFormSnippet?form=post">
+
+  <div>
+    <label for="dropdown">Planet:</label>
+    <select id="dropdown"></select>
+  </div>
+
+  <div id="distance">Distance will appear here</div>
+
+  <input type="submit" value="Book Ticket"/>
+
+</div>
+----
+
+现在, 当你改变一个选项的时候, 会自动的看到距离被计算, 并且显示出来, 但是当按 "Book Ticket" 按钮的时候, 也会把值传到服务器端.
+
+See Also
+^^^^^^^^
+
+<<MultiSelectBox>> 介绍了如何使用class而不是 `String` 作为选择框的选项.
+
+
+
+[[ClientSideOnlyActions]]
+使用Scala代码创建客户端行为
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用Lift的Scala代码, 通过Lift转化成一个纯粹的JavaScript代码在客户端.
+
+Solution
+^^^^^^^^
+
+绑定你的 JavaScript 直接到一个你想运行的事件上.
+
+这里有一个例子, 当你点击一个按钮的时候, 我们让它逐渐消失, 不过请注意, 我们在服务器端写这段代码:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+
+object ClientSide {
+  def render = "button [onclick]" #> "$(this).fadeOut()"
+}
+----
+
+在HTMl模版中, 我们这样写:
+
+[source,html]
+----
+<div data-lift="ClientSide">
+  <button>Click Me</button>
+</div>
+----
+
+Lift将生成:
+
+[source,html]
+----
+<button onclick="$(this).fadeOut()">Click Me</button>
+----
+
+Discussion
+^^^^^^^^^^
+
+Lift包含一个抽象的JavaScript, 你可以使用它建立一个更复杂的逻辑在服务器端. 比如说, 你可以建立一些基础的命令...
+
+[source,scala]
+----
+import net.liftweb.http.js.JsCmds.{Alert, RedirectTo}
+
+def render = "button [onclick]" #>
+  (Alert("Here we go...") & RedirectTo("http://liftweb.net"))
+----
+
+...将跳出一个提示, 并且跳转到 _http://liftweb.net_. The HTML would be rendered as:
+
+[source,html]
+----
+<button onclick="alert(&quot;Here we go...&quot;);
+window.location = &quot;http://liftweb.net&quot;;">Click Me</button>
+----
+
+另一个选项是使用 `JE.Call` 去运行一个JavaScript带参数的方法. 假设我们有以下方法:
+
+[source,javascript]
+----
+function greet(who, times) {
+  for(i=0; i<times; i++)
+    alert("Hello "+who);
+}
+----
+
+我们可以绑定一个按钮, 当它点击时, 显示:
+
+[source,scala]
+----
+import net.liftweb.http.js.JE
+
+def render =
+  "button [onclick]" #> JE.Call("greet", "World!", 3)
+----
+
+在客户端, 我们将会看到:
+
+[source,html]
+----
+<button onclick="greet(&quot;World!&quot;,3)">Click Me For Greeting</button>
+----
+
+请注意, 类型 `String` 和 `Int` 是一个固定的类型, 在JavaScript的语法里. 因为 `JE.Call` 使用一个变参 `JsExp` , 在JavaScript方法后. 它们已经被JavaScript的主要类型包裹 (`JE.Str`, `JE.Num`, `JsTrue`, `JsFalse`) 并且从Scala转换到JavaScript.
+
+
+See Also
+^^^^^^^^
+
+Chapter 10 of _Exploring Lift_ at http://exploring.liftweb.net/[http://exploring.liftweb.net/] 给出一个List的 `JsCmds` 和 `JE` 表达式.
+
+
+[[FocusOnLoad]]
+焦点一个域, 当页面加载时
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+当页面加载时, 你希望浏览器可以选择一个特定的域供用户输入.
+
+Solution
+^^^^^^^^
+
+使用 `FocusOnLoad` 命令:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.js.JsCmds.FocusOnLoad
+
+class Focus {
+  def render = "name=username" #> FocusOnLoad(<input type="text"/>)
+}
+----
+
+在这里 CSS transform 在 `render` 将会匹配 `name="username"` 元素并且替换它为一个文本域, 它将会在页面加载后, 自动称为焦点.
+
+尽管我们焦点一个HTML, 但是它可以是任何的 `NodeSeq`, 比如说 `SHtml.text`.
+
+Discussion
+^^^^^^^^^^
+
+`FocusOnLoad` 是一个 `NodeSeq => NodeSeq` transformation 的例子. 它添加 `NodeSeq` 到相关的JavaScript上, 这使得它称为焦点.
+
+JavaScript执行焦点的原理非常简单, 它找到ID对应的DOM, 然后调用 `focus`. 尽管以上的代码没有特定的ID,  `FocusOn` 命令非常聪明的自动添加了一个.
+
+这里有两种与 `JsCmd` 相关的方法:
+
+* `Focus` -- 以一个ID作为参数, 然后设置该ID上的元素为焦点.
+* `SetValueAndFocus` -- 和 `Focus` 类似, 但是需要一个参数 `String` 去改变值.
+
+这两个都很重要, 如果你需要通过Ajax或者Comet动态改变的时候.
+
+See Also
+^^^^^^^^
+
+看 `FocusOnLoad` 的源代码是学习它的一方法, 你还可以看到其他相关的方法.  这个可以帮助你自己组装你需要的JavaScript命令到一个方法中: https://github.com/lift/framework/blob/master/web/webkit/src/main/scala/net/liftweb/http/js/JsCommands.scala[https://github.com/lift/framework/blob/master/web/webkit/src/main/scala/net/liftweb/http/js/JsCommands.scala].
+
+
+[[CSSClassOnAjaxForm]]
+给一个Ajax表格添加CSS
+~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想给一个Ajax表格添加CSS.
+
+Solution
+^^^^^^^^
+
+使用a `?class=` 参数:
+
+[source,html]
+----
+<form data-lift="form.ajax?class=boxed">
+...
+</form>
+----
+
+Discussion
+^^^^^^^^^^
+
+如果你需要添加多个CSS, 在CSS文件间添加一个空格, 使用, `class=boxed+primary`.
+
+`form.ajax` 建造是一个简单的snippet掉欧阳那个:  `Form` snippet是一个内部的snippet, 在这个例子中, 我们调用方法 `ajax` 在它的对象中.  然而, 默认的调用不会把属性添加到HTML中, 但是通过我们修改后的snippet, 可以实现.
+
+See Also
+^^^^^^^^
+
+一个访问语句参数的例子, see <<ConditionalIncludes>>.
+
+_Simply Lift_, chapter 4, 介绍了Ajax表格在 http://simply.liftweb.net/[http://simply.liftweb.net/].
+
+
+
+[[DynamicTemplateLoading]]
+使用JavaScript运行一个HTMl
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想在当前页面中, 加载一个新的执行完snippet后的页面 (但是, 不用刷新当前页面).
+
+Solution
+^^^^^^^^
+
+使用 `Template` 加载HTML模版, 并且使用 `SetHtml` 替换HTML元素.
+
+让我们看一个例子. 这里 `<div>` 元素将显示主页, 当一个按钮按下:
+
+[source,html]
+----
+<div data-lift="TemplateLoad">
+  <div id="inject">Content will appear here</div>
+  <button>Load Template</button>
+</div>
+----
+
+相关的snippet为:
+
+[source,scala]
+----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.{SHtml, Templates}
+import net.liftweb.http.js.JsCmds.{SetHtml, Noop}
+import net.liftweb.http.js.JsCmd
+
+object TemplateLoad {
+
+  def content : JsCmd =
+    Templates("index" :: Nil).map(ns => SetHtml("inject", ns)) openOr Noop
+
+  def render = "button [onclick]" #> SHtml.ajaxInvoke(content _)
+}
+----
+
+点击按钮将会发生 `/index.html` 被加载到 `inject` 元素.
+
+Discussion
+^^^^^^^^^^
+
+`Templates` 生成一个 `Box[NodeSeq]`.  在上一个例子中, 我们将它传入 `JsCmd`, 并且它会处理 `inject` div.
+
+如果你对HTML模版使用Unit Tests, 请注意, 你需要修改你的开发和测试环境, 使他们包含 `webapps` 文件夹. 你可以使用 SBT, 并添加以下code到 `build.sbt`:
+
+[source,scala]
+----
+unmanagedResourceDirectories in Test <+= (baseDirectory) { _ / "src/main/webapp" }
+----
+
+对于IDE, 你需要添加 `webapp` 作为一个源代码文件夹.
+
+See Also
+^^^^^^^^
+
+<<ButtonTriggerServerCode>> 解释了 `ajaxInvoke` 和相关方法.
+
+
+[[JavaScriptTail]]
+把JavaScript放到文件末端
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想把你snippet中建立的JavaScrpt放到HTML的末端.
+
+Solution
+^^^^^^^^
+
+使用 `S.appendJs` 将会把你的JavaScript放到 `</body>` tag前.
+
+在这个HTMl中, 我们把 `<script>` tag放到中间, 然后把他绑定到一个snippet叫 `JavascriptTail`:
+
+[source,html]
+-----
+<!DOCTYPE html>
+<head>
+  <meta content="text/html; charset=UTF-8" http-equiv="content-type" />
+  <title>JavaScript in Tail</title>
+</head>
+<body data-lift-content-id="main">
+<div id="main" data-lift="surround?with=default;at=content">
+  <h2>Javascript in the tail of the page</h2>
+
+  <script type="text/javascript" data-lift="JavascriptTail">
+  </script>
+
+  <p>
+    The JavaScript about to be run will have been moved
+    to the end of this page, just before the closing
+    body tag.
+  </p>
+</div>
+</body>
+</html>
+-----
+
+这个 `<script>` 内容会被snippet自动生成.
+请注意, 它不一定是一个 `<script>` tag: snippet只是把所有的内容都取代成空内容的, 然后放到tag中:
+
+[source, scala]
+-----
+package code.snippet
+
+import net.liftweb.util.Helpers._
+import net.liftweb.http.js.JsCmds.Alert
+import net.liftweb.http.S
+import xml.NodeSeq
+
+class JavascriptTail {
+  def render = {
+    S.appendJs(Alert("Hi"))
+    "*" #> NodeSeq.Empty
+  }
+}
+-----
+
+尽管上边的snippet把所有内容取代成空内容, 但是它调用了 `S.appendJs` 和一个 `JsCmd`.  这将会在页面末端生成以下内容:
+
+[source, html]
+-----
+<script type="text/javascript">
+// <![CDATA[
+jQuery(document).ready(function() {
+  alert("Hi");
+});
+// ]]>
+</script>
+-----
+
+尽管这段snippet以前是在页面中间, 但是JavaScript生成在最后.
+
+
+Discussion
+^^^^^^^^^^
+
+还有其他三种方法你可以解决这个问题.  第一种是你可以把你的JavaScrpt文件放到一个外部文件中, 然后简单的放到你想放的任何地方.
+
+第二种是 `S.appendJs` 的另一个类似方法: `S.appendGlobalJs` 的工作原理和它相同, 但是不会包含 `ready` 方法在JavaScript中, 这意味着你无法保证, 等你的DOM加载后, 你的JavaScript会被加载.
+
+第三个选择是你可以把你的JavaScript包裹在`<lift:tail>` snippet :
+
+[source, scala]
+-----
+class JavascriptTail {
+  def render =
+    "*" #> <lift:tail>{Script(OnLoad(Alert("Hi")))}</lift:tail>
+}
+-----
+
+请注意, `lift:tail` 是一个Lift内建方法, 可以把里面的内容放到页面最后, 它甚至可以放置除JavaScript以外的东西.
+
+
+See Also
+^^^^^^^^
+
+<<AddToHead>> 介绍了如果把文件放到Head tag里.
+
+
+[[CometSessionLossJS]]
+当Comet Session丢失时, 运行一个JavaScript
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你正在使用comet actor, 你希望你的一个JavaScript可以运行, 当comet session丢失的时候.
+
+Solution
+^^^^^^^^
+
+设置你的JavaScript通过 `LiftRules.noCometSessionCmd`.
+
+作为一个例子, 我们使用一个标准的Lift聊天室demo, 我们希望当session丢失的时候, 可以保存聊天记录. 在这里, 我们有一个Ajax的表格作为输入框, 然后使用comet在聊天区域上:
+
+[source, html]
+-----
+<form data-lift="form.ajax">
+  <input type="text" data-lift="ChatSnippet" id="message"
+    placeholder="Type a message" />
+</form>
+
+<div data-lift="comet?type=ChatClient">
+  <ul>
+    <li>A message</li>
+  </ul>
+</div>
+-----
+
+在这里, 我们可以添加一个方法 `stash`, 它将在session丢失时, 被调用:
+
+[source, html]
+-----
+<script type="text/javascript">
+// <![CDATA[
+function stash() {
+  saveCookie("stashed", $('#message').val());
+  location.reload();
+}
+
+jQuery(document).ready(function() {
+  var stashedValue = readCookie("stashed") || "";
+  $('#message').val(stashedValue);
+  deleteCookie("stashed");
+});
+
+// Definition of saveCookie, readCookie, deleteCookie omitted.
+
+</script>
+-----
+
+我们的 `stash` 方法将会保存现在的聊天记录到一个cookie "stashed" 中.  我们设置, 当页面刷新的时候, Lift查看cookie, 然后把里面内容插入到聊天区域.
+
+最后一个部分是修改 `Boot.scala` 注册你的 `stash` :
+
+[source, scala]
+-----
+import net.liftweb.http.js.JsCmds.Run
+
+LiftRules.noCometSessionCmd.default.set( () => Run("stash()") )
+-----
+
+在这里, 当一个session丢失时, 服务器会调用 `stash` 方法, 记录聊天信息, 然后等再次访问这个页面时, 插入聊天信息 
+
+为了测试这个例子, 输入一些信息到聊天区域, 然后重启你的Lift应用.  等10秒, 你会看到效果.
+
+Discussion
+^^^^^^^^^^
+
+如果你不改变 `noCometSessionCmd`, Lift默认的行为是加载 `LiftRules.noCometSessionPage` -- 它是 `/` 除非你改变它.  这样你可以调用 `lift_sessionLost` 在 `cometAjax.js`.
+
+通过提供我们自定义的 `() => JsCmd` 方法到 `LiftRules.noCometSessionCmd`, Lift会调用这个方法, 然后传递 `JsCmd`, 而不是 `lift_sessionLost`. 如果你看HTTP流, 你将会看到 `stash` 方法被调用, 作为一个对comet request的回复.
+
+.Factory
+****
+The `noCometSessionCmd.default.set` call is making use of Lift's dependency injection. Specifically, it's setting up the "supply side" of the dependency. Although we're setting a default here, it's possible in Lift to supply different behaviours with different scopes: request or session.  See https://www.assembla.com/spaces/liftweb/wiki/Dependency_Injection[https://www.assembla.com/spaces/liftweb/wiki/Dependency_Injection].
+****
+
+这章中, 我们介绍了如何处理一个session丢失, 和 Ajax, 以及相关的 `LiftRules.noAjaxSessionCmd` 设置.
+
+See Also
+^^^^^^^^
+
+你会找到 _The ubiquitous Chat app_ in _Simply Lift_: http://simply.liftweb.net/[http://simply.liftweb.net/].
+
+观看HTTP流, 是一个很好的学习和观察comet如何工作的方法.  有很多的插件和产品, 支持这个功能, 比如说 _HttpFox_ plugin for Firefox: https://addons.mozilla.org/en-us/firefox/addon/httpfox/[https://addons.mozilla.org/en-us/firefox/addon/httpfox/].
+
+
+
+
+[[AjaxFileUpload]]
+Ajax文件上传
+~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想提供给你的用户一个Ajax文件上传的功能, 并且可以支持拖拉文件.
+
+Solution
+^^^^^^^^
+
+添加 Sebastian Tschan's _jQuery File Upload_ widget (https://github.com/blueimp/jQuery-File-Upload[https://github.com/blueimp/jQuery-File-Upload]) 到你的工程 然后使用REST接受文件.
+
+第一步是下载widget, 然后把 `js` 文件夹放到你的应用里 `src/main/webapp/js`.  然后我们就可以使用它:
+
+[source,html]
+---------------------------------------------------------
+<!DOCTYPE HTML>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>jQuery File Upload Example</title>
+</head>
+<body>
+
+<h1>Drag files onto this page</h1>
+
+<input id="fileupload" type="file" name="files[]" data-url="/upload" multiple>
+
+<div id="progress" style="width:20em; border: 1pt solid silver; display: none">
+  <div id="progress-bar" style="background: green; height: 1em; width:0%"></div>
+</div>
+
+<script src="//ajax.googleapis.com/ajax/libs/jquery/1.8.3/jquery.min.js"></script>
+<script src="js/vendor/jquery.ui.widget.js"></script>
+<script src="js/jquery.iframe-transport.js"></script>
+<script src="js/jquery.fileupload.js"></script>
+
+<script>
+  $(function () {
+    $('#fileupload').fileupload({
+      dataType: 'json',
+      add: function (e,data) {
+        $('#progress-bar').css('width', '0%');
+        $('#progress').show();
+        data.submit();
+      },
+      progressall: function (e, data) {
+        var progress = parseInt(data.loaded / data.total * 100, 10) + '%';
+        $('#progress-bar').css('width', progress);
+      },
+      done: function (e, data) {
+        $.each(data.files, function (index, file) {
+          $('<p/>').text(file.name).appendTo(document.body);
+        });
+        $('#progress').fadeOut();
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
+---------------------------------------------------------
+
+这个HTML模版提供了一个输入框用于上传文件, 一个区域用来提供状态显示, 和一个设置当使用Jquery `$( ... )` 语句.
+
+最后的一部分是一个Lift REST服务用来收取文件.  服务的URL是 `/upload`, 被设置在 `data-url` 在 `input` 域, 我们通过匹配来找到它:
+
+[source,scala]
+---------------------------------------------------------
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.OkResponse
+
+object AjaxFileUpload extends RestHelper {
+
+  serve {
+
+    case "upload" :: Nil Post req =>
+      for (file <- req.uploadedFiles) {
+        println("Received: "+file.fileName)
+      }
+      OkResponse()
+
+  }
+
+}
+---------------------------------------------------------
+
+这个现实只是返回一个文件名称和一个HTTP 200 状态到widget上.
+
+所有的REST服务, 都需要被注册在 `Boot.scala`:
+
+[source,scala]
+---------------------------------------------------------
+LiftRules.dispatch.append(code.rest.AjaxFileUpload)
+---------------------------------------------------------
+
+默认情况下, 这个widget让整个的HTML下沉, 来显示文件, 这意味着你可以通过拖拉来实现文件的上传.
+
+Discussion
+^^^^^^^^^^
+
+通过这章, 我们简单的介绍了如何集成widget到Lift应用.  DEMO网站在, http://blueimp.github.com/jQuery-File-Upload/[http://blueimp.github.com/jQuery-File-Upload/], 显示了其他功能, 并且提供了文档来介绍如何集成它们.
+
+很多功能只需要 JavaScript 设置.  比如说, 我们使用widget的 `add`, `progressall`, 和 `done` 来处理show, update 和淡出一个状态条.  当上传结束时, 上传的文件名称被加载到页面上.
+
+在REST服务中, 上传通过 `uploadedFiles` 方法在请求中. 当Lift收到一个多个文件上传的情况时, Lift会自动解析文件到 `uploadedFiles`, 给每个文件一个 `FileParamHolder` 用来访问 `fileName`, `length`, `mimeType` 和 `fileStream`.
+
+默认情况下, 文件是暂时存在内存中 (请看 <<UploadToDisk>> in <<FileUpload>>).
+
+在这章中, 我们返回一个 200 (`OkResponse`). 如果我们想告诉widget, 上传的文件被拒绝, 我们可以返回一个别的状态代码. 比如说, 我们假设想拒绝任何, 除了PNG后缀的文件. 在服务端, 可以取代 `OkResponse` 为一个测试:
+
+[source,scala]
+---------------------------------------------------------
+import net.liftweb.http.{ResponseWithReason, BadResponse, OkResponse}
+
+if (req.uploadedFiles.exists( _.mimeType != "image/png" ))
+  ResponseWithReason(BadResponse(), "Only PNGs")
+else
+  OkResponse()
+---------------------------------------------------------
+
+我们简单的让它称为一个 `fail` 处理在JavaScript中:
+
+[source,javascript]
+---------------------------------------------------------
+fail: function (e, data) {
+  alert(data.errorThrown);
+}
+---------------------------------------------------------
+
+当上传后, 比如说时一个JPEG文件, 浏览器将提示用户, "Only PNGs".
+
+See Also
+^^^^^^^^
+
+Diego Medina 发布了一个完整的Gist, 里面包裹图像上传, 阅览, 特别是里面还有JSON功能, 你可以在以下地址找到: https://gist.github.com/a6715d1e3664f73cd03a[https://gist.github.com/a6715d1e3664f73cd03a].
+
+<<FileUpload>> 介绍了基本的文件上传功能, 和如何控制文件存储.
+
+Antonio Salazar Cardozo 发布了一个例子, 里面包裹Ajax文件上传, 和外部JavaScript库: https://groups.google.com/d/msg/liftweb/OuN1sqRMO_c/TrUGUaSvoN4J[https://groups.google.com/d/msg/liftweb/OuN1sqRMO_c/TrUGUaSvoN4J].
+

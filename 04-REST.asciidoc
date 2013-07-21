@@ -1,0 +1,826 @@
+[[REST]]
+REST
+----
+
+这章是讲关于REST服务的, 通过使用 Lift 的 `RestHelper` trait. 作为一个介绍, 请看Lift Wiki https://www.assembla.com/spaces/liftweb/wiki/REST_Web_Services[https://www.assembla.com/spaces/liftweb/wiki/REST_Web_Services] and chapter 5 of _Simply Lift_ at http://simply.liftweb.net[http://simply.liftweb.net].
+
+这章的代码在以下地方可以找到: https://github.com/LiftCookbook/cookbook_rest[https://github.com/LiftCookbook/cookbook_rest].
+
+
+[[DRYURLs]]
+干净的URLs
+~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你发现你在重复一部分URL, 在使用 `RestHelper`的时候, 你不想重复的写同一段code.
+
+Solution
+^^^^^^^^
+
+使用 `prefix` 在你的 `RestHelper`:
+
+[source,scala]
+----
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+
+object IssuesService extends RestHelper {
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(IssuesService)
+  }
+
+  serve("issues" / "by-state" prefix {
+    case "open" :: Nil XmlGet _ => <p>None open</p>
+    case "closed" :: Nil XmlGet _ => <p>None closed</p>
+    case "closed" :: Nil XmlDelete _ => <p>All deleted</p>
+  })
+
+}
+----
+
+这个服务回复URLs, _/issues/by-state/open_ and _/issues/by-state/closed_ 并且, 我们使用了 `prefix`.
+
+把这个连入 `Boot.scala`:
+
+[source,scala]
+----
+import code.rest.IssuesService
+IssuesService.init()
+----
+
+我们可以测试cURL:
+
+------------------
+$ curl -H 'Content-Type: application/xml'
+    http://localhost:8080/issues/by-state/open
+<?xml version="1.0" encoding="UTF-8"?>
+<p>None open</p>
+
+$ curl -X DELETE -H 'Content-Type: application/xml'
+    http://localhost:8080/issues/by-state/closed
+<?xml version="1.0" encoding="UTF-8"?>
+<p>All deleted</p>
+------------------
+
+Discussion
+^^^^^^^^^^
+
+你有很多的 serve` 语句在你的 `RestHelper`, 他们构建了你的REST服务.
+
+在这里例子中, 我们决定返回 XML 并且匹配一个 XML request, 通过使用 `XmlGet` 和 `XmlDelete`. 对一个XML request的测试, 需要使用 _text/xml_ 或者 _application/xml_ 的content-type, 它是一个request以 `.xml`结尾. 这就是为什么cURL使用 `-H` 标签.  如果我们没有使用这个标签, 这个request将不会匹配任何条目, 然后将会返回 404 response.
+
+
+
+See Also
+^^^^^^^^
+
+<<JSONREST>> 给出一个接收并返回 JSON 的例子.
+
+
+
+
+
+[[MissingSuffix]]
+缺少文件后缀
+~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你的 `RestHelper` 需要一个文件名作为URL的一部分, 但是suffix(扩展名)丢失了, 但是你需要他.
+
+Solution
+^^^^^^^^
+
+访问 `req.path.suffix` 来修复 suffix.
+
+比如说, 当处理 `/download/123.png` 你想你能够重新构建 `123.png`:
+
+[source,scala]
+----
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+import xml.Text
+
+object Reunite extends RestHelper  {
+
+  private def reunite(name: String, suffix: String) =
+    if (suffix.isEmpty) name else name+"."+suffix
+
+  serve {
+    case "download" :: file :: Nil Get req =>
+      Text("You requested "+reunite(file, req.path.suffix))
+  }
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(Reunite)
+  }
+
+}
+----
+
+我们匹配 `download` 但不是直接使用 `file` 的值, 我们把它放入 `reunite` 方法中, 让他找回后缀 (如果有后缀的话).
+
+对这种URL, 使用cURL做请求, 你会看到:
+
+----
+$ curl http://127.0.0.1:8080/download/123.png
+<?xml version="1.0" encoding="UTF-8"?>
+You requested 123.png
+----
+
+Discussion
+^^^^^^^^^^
+
+当Lift处理一个request的时候, 它将request分割成几部分(比如说, 把一个路径变成`List[String]`). 这里包含了后缀. 这是一个非常好的做法, 因为有时候, 你需要匹配一个后缀, 但是却出现了我们这里提到的问题.
+
+这里设置了后缀的使用 `LiftRules.explicitlyParsedSuffixes`, 它把一个文件名分割出后缀. 它包含很多带逗号的后缀, (比如说 "png", "atom", "json")还有一些你也许不想要, 比如说 "com".
+
+请注意, 如果后缀没有在 `explicitlyParsedSuffixes` 中, 后缀将是一个空string, 并且 `name` (在上个例子中)会包含它的后缀.
+
+这取决于你的需求, 你也可以设置一个保护措施, 检查后缀:
+
+[source, scala]
+-------
+case "download" :: file :: Nil Get req if req.path.suffix == "png" =>
+  Text("You requested PNG file called "+file)
+-------
+
+或者简单的把后缀附在名字上, 有时候并不用修改后缀的. 比如说, 如果客户端支持 WebP 图像格式, 你这样发送它:
+
+[source, scala]
+-------
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+import xml.Text
+
+object Reunite extends RestHelper  {
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(Reunite)
+  }
+
+  serve {
+    case "negotiate" :: file :: Nil Get req =>
+      val toSend =
+        if (req.header("Accept").exists(_ == "image/webp")) file+".webp"
+        else file+".png"
+
+      Text("You requested "+file+", would send "+toSend)
+  }
+
+}
+-------
+
+通过调用这个服务, 将会在决定哪个资源发送之前, 检查HTTP Accept header:
+
+-------------------
+$ curl http://localhost:8080/negotiate/123
+<?xml version="1.0" encoding="UTF-8"?>
+You requested 123, would send 123.png
+
+$ curl http://localhost:8080/negotiate/123 -H "Accept: image/webp"
+<?xml version="1.0" encoding="UTF-8"?>
+You requested 123, would send 123.webp
+-------------------
+
+
+See Also
+^^^^^^^^
+
+<<MissingDotCom>> 展示了如何删除 `explicitlyParsedSuffixes`.
+
+`HttpHelpers.scala` 的源码包含了 `explicitlyParsedSuffixes` list, 是一个默认的list包含所有的后缀:  https://github.com/lift/framework/blob/master/core/util/src/main/scala/net/liftweb/util/HttpHelpers.scala[https://github.com/lift/framework/blob/master/core/util/src/main/scala/net/liftweb/util/HttpHelpers.scala
+].
+
+
+
+[[MissingDotCom]]
+Email地址中缺少.com
+~~~~~~~~~~~~~~~~~
+
+当我们通过REST提交一个email时, 一个域名以 ".com" 结尾, 但是在被 REST 处理前被删除.
+
+Solution
+^^^^^^^^
+
+修改 `LiftRules.explicitlyParsedSuffixes`, 这样Lift不会改变后缀 ".com".
+
+在 `Boot.scala`:
+
+[source,scala]
+----
+import net.liftweb.util.Helpers
+LiftRules.explicitlyParsedSuffixes = Helpers.knownSuffixes &~ (Set("com"))
+----
+
+Discussion
+^^^^^^^^^^
+
+默认情况下, Lift会捕获文件的后缀, 这是为了匹配更方便: 也许你需要匹配 ".xml" or ".pdf".  然而, ".com" 是其中之一, 但是这会造成它的丢失.
+
+请注意, 这个不会影响在URL中间的email.  比如说, 请看如下的REST服务:
+
+[source,scala]
+----
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+import xml.Text
+
+object Suffix extends RestHelper {
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(Suffix)
+  }
+
+  serve {
+    case "email" :: e :: "send" :: Nil Get req =>
+      Text("In middle: "+e)
+
+    case "email" :: e :: Nil Get req =>
+      Text("At end: "+e)
+  }
+
+}
+----
+
+在这个服务中, `init` 方法在 `Boot.scala` 中被调用, 我们可以通过request看发生的问题:
+
+----------------
+$ curl http://localhost:8080/email/you@example.com/send
+<?xml version="1.0" encoding="UTF-8"?>
+In middle: you@example.com
+
+$ curl http://localhost:8080/email/you@example.com
+<?xml version="1.0" encoding="UTF-8"?>
+At end: you@example
+----------------
+
+".com" 被认为是一个文件的后缀, 这就是为什么从后缀List中删除它会解决问题.
+
+请注意, 因为他是一个顶级域名, 比如说 ".uk", ".nl", ".gov", 不再 `explicitlyParsedSuffixes` 中, 这里的Email将不会被修改.
+
+
+See Also
+^^^^^^^^
+
+<<MissingSuffix>>  中介绍了更多关于后缀的介绍.
+
+
+
+
+[[SuffixMatchFail]]
+无法匹配前缀
+~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你尝试匹配一个后缀, 但是匹配失败.
+
+Solution
+^^^^^^^^
+
+确保你匹配的后缀在 `LiftRules.explicitlyParsedSuffixes`.
+
+比如说, 假设你想匹配所有的问题以`.csv` 结尾, 在 `/reports/` URL中:
+
+[source,scala]
+----
+case Req("reports" :: name :: Nil, "csv", GetRequest) =>
+  Text("Here's your CSV report for "+name)
+----
+
+你希望的到的是让 `/reports/foo.csv` 返回 "Here's your CSV report
+for foo", 但是你得到的是 404.
+
+为了解决这个问题, 包含 "csv" 作为一个Lift的后缀, 让Lift知道如何分离它.  在 `Boot.scala` 中添加:
+
+[source,scala]
+----
+LiftRules.explicitlyParsedSuffixes += "csv"
+----
+
+然后这个匹配就可以使用了.
+
+Discussion
+^^^^^^^^^^
+
+如果不添加 ".csv" 到 `explicitlyParsedSuffixes`, URL将会使用:
+
+[source,scala]
+----
+case Req("reports" :: name :: Nil, "", GetRequest) =>
+  Text("Here's your CSV report for "+name)
+----
+
+在这里我们匹配一个 (`""`). 在这里例子中, `name` 被设置为 "foo.csv".  这是因为Lift分割一个后缀, 只能分割在 `explicitlyParsedSuffixes`中的.  因为默认下, `csv` 并不在, "foo.csv" 将不会被分割. 这就是为什么 `csv` 在后缀匹配的时候, 不会被匹配.
+
+
+See Also
+^^^^^^^^
+
+<<MissingSuffix>> 解释了更多关于Lift的后缀缺失.
+
+
+
+
+
+[[RestBinaryData]]
+在REST服务中接收二进制数据
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想让用户上传一个图片, 或者二进制数据通过RESTFUL服务.
+
+Solution
+^^^^^^^^
+
+通过访问request的body:
+
+[source,scala]
+----------------------
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+
+object Upload extends RestHelper {
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(Upload)
+  }
+
+  serve {
+    case "upload" :: Nil Post req =>
+      for {
+        bodyBytes <- req.body
+      } yield <info>Received {bodyBytes.length} bytes</info>
+  }
+
+}
+----------------------
+
+把这个连入你的`Boot.scala`:
+
+[source,scala]
+----------------------
+import code.rest.Upload
+Upload.init()
+----------------------
+
+你可以使用cURL来测试:
+
+----------------------
+$ curl -X POST --data-binary "@dog.jpg" -H 'Content-Type: image/jpg'
+    http://127.0.0.1:8080/upload
+<?xml version="1.0" encoding="UTF-8"?>
+<info>Received 1365418 bytes</info>
+----------------------
+
+Discussion
+^^^^^^^^^^
+
+在上边的例子中, 访问二进制数据通过`req.body`, 并且返回一个 `Box[Array[Byte]]`.  我们把它转换为 `Box[Elem]` 并发回客户端. 在 `RestHelper` 里, 会转为 `XmlResponse` 以供Lift处理.
+
+请注意, 作为web容器, 比如说 Jetty 和 Tomcat, 会有上传限制. 当你看到以下错误的时候 "java.lang.IllegalStateException: Form too large705784>200000" 你就会知道上限是什么了.
+你也可以通过查看文档来了解上限.
+
+为了限制上传文件的类型, 你添加一个条件去匹配文件, 但是你会发现, 一个更简单的方法是, 你可以使用对象的 `unapply` .  比如说, 只允许上传JPEG文件:
+
+
+[source,scala]
+----------------------
+serve {
+  case "jpg" :: Nil Post JPeg(req) =>
+    for {
+      bodyBytes <- req.body
+    } yield <info>Jpeg Received {bodyBytes.length} bytes</info>
+  }
+
+object JPeg {
+  def unapply(req: Req): Option[Req] =
+    req.contentType.filter(_ == "image/jpg").map(_ => req)
+}
+----------------------
+
+我们定义了一个过滤器, 它将解析 `JPeg` , 如果文件类型为 "image/jpg", 返回一个 `Some[Req]`, ; 如果不是,  结果是 `None`. 这就是REST服务的匹配 `JPeg(req)`.  请注意, 方法 `unapply` 需要返回 `Option[Req]` 这是 `Post` 解析器所需要的类型.
+
+
+See Also
+^^^^^^^^
+
+Odersky _et al._, (2008), _Programming in Scala_, chapter 24, 解释了什么是解析器: http://www.artima.com/pins1ed/extractors.html[http://www.artima.com/pins1ed/extractors.html].
+
+
+<<FileUpload>> 解释了多文件上传
+
+
+
+[[JSONREST]]
+返回JSON
+~~~~~~~
+
+Problem
+^^^^^^^
+
+你想返回一个JSON当使用REST Call.
+
+Solution
+^^^^^^^^
+
+使用 Lift JSON domain specific language (DSL). 比如说:
+
+[source,scala]
+----
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.http.LiftRules
+import net.liftweb.json.JsonAST._
+import net.liftweb.json.JsonDSL._
+
+object QuotationsAPI extends RestHelper {
+
+  def init() : Unit = {
+    LiftRules.statelessDispatch.append(QuotationsAPI)
+  }
+
+  serve {
+    case "quotation" :: Nil JsonGet req =>
+      ("text" -> "A beach house isn't just real estate. It's a state of mind.") ~
+        ("by" -> "Douglas Adams") : JValue
+  }
+
+}
+----
+
+Wire this into `Boot.scala`:
+
+[source,scala]
+----
+import code.rest.QuotationsAPI
+QuotationsAPI.init()
+----
+
+Running this example produces:
+
+----
+$ curl -H 'Content-type: text/json' http://127.0.0.1:8080/quotation
+{
+  "text":"A beach house isn't just real estate. It's a state of mind.",
+  "by":"Douglas Adams"
+}
+----
+
+Discussion
+^^^^^^^^^^
+
+_type ascription_ 在 JSON 表达式的最后 (`: JValue`)
+告诉了编译器, 表达式希望获得的类型为 `JValue`. 这是使用DSL时必须的. 如果没有强制它, 比如说, 你将会调用一个名叫 `JValue` 的方法.
+
+JSON DSL 允许你创建一个嵌套结构, lists 和其他你所有想做为JSON的东西.
+
+See Also
+^^^^^^^^
+
+lift-json工程的README文件是一个非常好的学习lift-json的资源: https://github.com/lift/framework/tree/master/core/json[https://github.com/lift/framework/tree/master/core/json].
+
+
+
+
+[[GoogleSitemap]]
+Google Sitemap
+~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用Lift去创建一个Google Sitemap.
+
+Solution
+^^^^^^^^
+
+建立一个sitemap的结构, 然后把它绑定在HTML模版上.
+
+我们从 `sitemap.html` 在你的 `webapp` 文件夹开始, 它包含一个有效的XML-Sitemap:
+
+[source, xml]
+----
+<?xml version="1.0" encoding="utf-8" ?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url data-lift="SitemapContent.base">
+        <loc></loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+        <lastmod></lastmod>
+    </url>
+    <url data-lift="SitemapContent.list">
+        <loc></loc>
+        <lastmod></lastmod>
+    </url>
+</urlset>
+----
+
+创建一个snippet去填补需要的地方:
+
+[source,scala]
+----
+package code.snippet
+
+import org.joda.time.DateTime
+import net.liftweb.util.CssSel
+import net.liftweb.http.S
+import net.liftweb.util.Helpers._
+
+class SitemapContent {
+
+  case class Post(url: String, date: DateTime)
+
+  lazy val entries =
+    Post("/welcome", new DateTime) :: Post("/about", new DateTime) :: Nil
+
+  val siteLastUdated = new DateTime
+
+  def base: CssSel =
+    "loc *" #> "http://%s/".format(S.hostName) &
+      "lastmod *" #> siteLastUdated.toString("yyyy-MM-dd'T'HH:mm:ss.SSSZZ")
+
+  def list: CssSel =
+    "url *" #> entries.map(post =>
+      "loc *" #> "http://%s%s".format(S.hostName, post.url) &
+        "lastmod *" #> post.date.toString("yyyy-MM-dd'T'HH:mm:ss.SSSZZ"))
+
+}
+----
+
+这个例子是, 用存储的信息在两个页面上.
+
+使用HTML模版和snippet在一个REST服务中在URL `/sitemap`上:
+
+[source,scala]
+----
+package code.rest
+
+import net.liftweb.http._
+import net.liftweb.http.rest.RestHelper
+
+object Sitemap extends RestHelper {
+  serve {
+    case Req("sitemap" :: Nil, _, GetRequest) =>
+      XmlResponse(
+        S.render(<lift:embed what="sitemap" />,
+        S.request.get.request).head)
+  }
+}
+----
+
+把它连入你的 `Boot.scala`, 比如说:
+
+[source,scala]
+----
+LiftRules.statelessDispatch.append(code.rest.Sitemap)
+----
+
+测试服务, 通过使用cURL:
+
+[source,bash]
+----
+$ curl http://127.0.0.1:8080/sitemap
+
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>http://127.0.0.1/</loc>
+        <changefreq>daily</changefreq>
+        <priority>1.0</priority>
+        <lastmod>2013-02-10T19:16:12.433+00:00</lastmod>
+    </url>
+    <url>
+        <loc>http://127.0.0.1/welcome</loc>
+        <lastmod>2013-02-10T19:16:12.434+00:00</lastmod>
+    </url><url>
+        <loc>http://127.0.0.1/about</loc>
+        <lastmod>2013-02-10T19:16:12.434+00:00</lastmod>
+    </url>
+</urlset>
+----
+
+Discussion
+^^^^^^^^^^
+
+你也许很奇怪, 为什么我们在这里使用 REST , 这里我们只有一些普通的HTML和snippet. 原因是我们想使用XML而不是HTML作为输出.  我们使用相同的机制, 但是把他作为一个 `XmlResponse`.
+
+`S.render` 方法, 需要 `NodeSeq` 和 `HTTPRequst` 作为参数. 第一个参数, 我们提供它通过运行`sitemap.html` snippet; 第二个参数我们使用现在的request.  `XmlResponse` 需要一个 `Node`而不是一个 `NodeSeq`, 这就是为什么我们调用 `head` -- 它是这里唯一的Node, 并且是我们需要的类型.
+
+请注意, Google Sitemaps 需要日期是 ISO 8601 格式. 内奸的 `java.text.SimpleDateFormat` 直到Java 7都不支持这种格式. 如果你正在使用Java 6 你可以使用 `org.joda.time.DateTime`.
+
+See Also
+^^^^^^^^
+
+Sitemaps在这里有说明: http://support.google.com/webmasters/bin/answer.py?hl=en&answer=156184[http://support.google.com/webmasters/bin/answer.py?hl=en&answer=156184].
+
+
+
+
+[[iOSNativePost]]
+在IOS应用中调用REST服务
+~~~~~~~~~~~~~~~~~~~~~
+
+Problem
+^^^^^^^
+
+你想使用HTTP POST通过REST服务在IOS中.
+
+Solution
+^^^^^^^^
+
+使用 `NSURLConnection` 确保你的内容类型为 "application/json".
+
+比如说, 假设我们想调用这个服务:
+
+[source,scala]
+---------------------------------------------------------
+package code.rest
+
+import net.liftweb.http.rest.RestHelper
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
+
+object Shouty extends RestHelper {
+
+  def greet(name: String) : JValue =
+    "greeting" -> ("HELLO "+name.toUpperCase)
+
+  serve {
+    case "shout" :: Nil JsonPost json->request =>
+      for { JString(name) <- (json \\ "name").toOpt }
+      yield greet(name)
+  }
+
+}
+---------------------------------------------------------
+
+这个服务需要一个 JSON post 和一个名为 "name"的参数, 然后它返回一个JSON对象.  为了展示数据是如何从服务器输入, 输出, 我们可以添加以下语句到 `Boot.scala`...
+
+[source,scala]
+---------------------------------------------------------
+LiftRules.statelessDispatch.append(Shouty)
+---------------------------------------------------------
+
+...and then call it from the command line:
+
+-----
+$ curl -d '{ "name" : "Richard" }' -X POST -H 'Content-type: application/json'
+   http://127.0.0.1:8080/shout
+{
+  "greeting":"HELLO RICHARD"
+}
+-----
+
+
+我们实现POST通过 `NSURLConnection`:
+
+[source, objc]
+---------------------------------------------------------
+static NSString *url = @"http://localhost:8080/shout";
+
+-(void) postAction {
+  // JSON data:
+  NSDictionary* dic = @{@"name": @"Richard"};
+  NSData* jsonData =
+    [NSJSONSerialization dataWithJSONObject:dic options:0 error:nil];
+  NSMutableURLRequest *request = [
+    NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]
+    cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:60.0];
+
+  // Construct HTTP request:
+  [request setHTTPMethod:@"POST"];
+  [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+  [request setValue:[NSString stringWithFormat:@"%d", [jsonData length]]
+    forHTTPHeaderField:@"Content-Length"];
+  [request setHTTPBody: jsonData];
+
+  // Send the request:
+  NSURLConnection *con = [[NSURLConnection alloc]
+    initWithRequest:request delegate:self];
+}
+
+- (void)connection:(NSURLConnection *)connection
+  didReceiveResponse:(NSURLResponse *)response {
+   // Start off with new, empty, response data
+   self.receivedJSONData = [NSMutableData data];
+}
+
+- (void)connection:(NSURLConnection *)connection
+  didReceiveData:(NSData *)data {
+   // append incoming data
+   [self.receivedJSONData appendData:data];
+}
+
+- (void)connection:(NSURLConnection *)connection
+  didFailWithError:(NSError *)error {
+   NSLog(@"Error occurred ");
+}
+
+- (void)connectionDidFinishLoading:(NSURLConnection *)connection {
+  NSError *e = nil;
+  NSDictionary *JSON =
+    [NSJSONSerialization JSONObjectWithData: self.receivedJSONData
+    options: NSJSONReadingMutableContainers error: &e];
+  NSLog(@"Return result: %@", [JSON objectForKey:@"greeting"]);
+}
+---------------------------------------------------------
+
+显然的, 这里我们有很多很难的code, 不过不用担心, 他们只是你的一个你应用的开始点.
+
+
+
+Discussion
+^^^^^^^^^^
+
+做HTTP POST在IOS中有很多方法, 并且很难判断哪种是最好的方法, 特别是没有一个很好的外部支持库. 上面的例子使用的是原生的IOS API.
+
+另一个方法是使用 _AFNetworking_. 这是一个非常流行的外部库在iOS开发中, 在很多情况下, 它很有用:
+
+[source, objc]
+---------------------------------------------------------
+#import "AFHTTPClient.h"
+#import "AFNetworking.h"
+#import "JSONKit.h"
+
+static NSString *url = @"http://localhost:8080/shout";
+
+-(void) postAction {
+  // JSON data:
+  NSDictionary* dic = @{@"name": @"Richard"};
+  NSData* jsonData =
+   [NSJSONSerialization dataWithJSONObject:dic options:0 error:nil];
+
+  // Construct HTTP request:
+  NSMutableURLRequest *request =
+   [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]
+    cachePolicy:NSURLRequestUseProtocolCachePolicy timeoutInterval:60.0];
+  [request setHTTPMethod:@"POST"];
+  [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+  [request setValue:[NSString stringWithFormat:@"%d", [jsonData length]]
+    forHTTPHeaderField:@"Content-Length"];
+  [request setHTTPBody: jsonData];
+
+  // Send the request:
+  AFJSONRequestOperation *operation =
+    [[AFJSONRequestOperation alloc] initWithRequest: request];
+  [operation setCompletionBlockWithSuccess:^(AFHTTPRequestOperation *operation,
+    id responseObject)
+  {
+     NSString *response = [operation responseString];
+
+     // Use JSONKit to deserialize the response into NSDictionary
+     NSDictionary *deserializedJSON = [response objectFromJSONString];
+     [deserializedJSON count];
+
+     // The response object can be a NSDicionary or a NSArray:
+      if([deserializedJSON count]> 0) {
+         NSLog(@"Return value: %@",[deserializedJSON objectForKey:@"greeting"]);
+      }
+      else {
+        NSArray *deserializedJSONArray = [response objectFromJSONString];
+        NSLog(@"Return array value: %@", deserializedJSONArray );
+      }
+  }failure:^(AFHTTPRequestOperation *operation, NSError *error)
+  {
+    NSLog(@"Error: %@",error);
+  }];
+  [operation start];
+}
+---------------------------------------------------------
+
+`NSURLConnection` 的做法是给你更多功能的选择, 让你的starting point去构造你自己的解决方案, 比如说, 让内容类型(content-type)更明确. 然而, `AFNetworking` 更流行, 所以你也许更喜欢它.
+
+
+See Also
+^^^^^^^^
+
+你能找到 "Complete REST Example" 在 _Simply Lift_. http://simply.liftweb.net/index-5.4.html[http://simply.liftweb.net/index-5.4.html].
+
+
+
+
+
+
+
+
+
